@@ -1,11 +1,12 @@
-import type {
-  CheckState,
-  IssueItem,
-  MergeMethod,
-  MergeableState,
-  PullRequestItem,
-  RepoRef,
-  ReviewDecision,
+import {
+  type CheckState,
+  type IssueItem,
+  type MergeMethod,
+  type MergeableState,
+  type PullRequestItem,
+  type RepoRef,
+  type ReviewDecision,
+  reviewSatisfied,
 } from '../../shared/types.js'
 
 interface RawRepo {
@@ -166,10 +167,10 @@ export function normalizePr(raw: RawPr): PullRequestItem {
     changedFiles: raw.changedFiles,
     additions: raw.additions,
     deletions: raw.deletions,
-    // Approved, no conflicts, not a draft. A red check is deliberately not
-    // disqualifying on its own: unless a branch rule requires that check,
+    // Reviews satisfied, no conflicts, not a draft. A red check is deliberately
+    // not disqualifying on its own: unless a branch rule requires that check,
     // GitHub merges it. applyMergeStates refines this with GitHub's own answer.
-    canMerge: !raw.isDraft && decision === 'approved' && merge !== 'conflicting',
+    canMerge: !raw.isDraft && reviewSatisfied(decision) && merge !== 'conflicting',
     allowedMergeMethods: allowedMergeMethods(raw.repository),
   }
 }

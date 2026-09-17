@@ -39,6 +39,16 @@ export function mergeStateBlocks(state: MergeState): state is BlockingMergeState
   return (BLOCKING_MERGE_STATES as readonly MergeState[]).includes(state)
 }
 
+/**
+ * Whether reviews stand in the way of merging. `none` satisfies: it is what
+ * GitHub answers on a repo with no required-review rule - most personal
+ * projects - and GitHub merges those without an approval. Only a rule still
+ * waiting (`review_required`) or a standing objection blocks.
+ */
+export function reviewSatisfied(decision: ReviewDecision): boolean {
+  return decision === 'approved' || decision === 'none'
+}
+
 export interface RepoRef {
   /** e.g. "octocat/hello-world" */
   nameWithOwner: string
