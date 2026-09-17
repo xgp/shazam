@@ -271,22 +271,22 @@ export function App() {
     return map
   }, [data, dismissed, owners, parsedQuery])
 
-  // j/k walk the cards in reading order: column by column, top to bottom.
-  // Collapsed columns render no cards, so the cursor skips them.
-  const cursorItems = useMemo(
+  // The keyboard cursor's view of the board, in render order: j/k flatten it
+  // into reading order, the arrows keep the column structure. Collapsed
+  // columns render no cards, so the cursor skips them entirely.
+  const cursorColumns = useMemo(
     () =>
-      COLUMNS.flatMap((column) =>
-        collapsedColumns.has(column.id)
-          ? []
-          : (visibleByColumn.get(column.id) ?? []).map((item) => ({
-              id: item.id,
-              url: item.url,
-            })),
-      ),
+      COLUMNS.filter((column) => !collapsedColumns.has(column.id)).map((column) => ({
+        columnId: column.id,
+        items: (visibleByColumn.get(column.id) ?? []).map((item) => ({
+          id: item.id,
+          url: item.url,
+        })),
+      })),
     [visibleByColumn, collapsedColumns],
   )
 
-  useBoardKeys(cursorItems, lastClickedId, setLastClickedId)
+  useBoardKeys(cursorColumns, lastClickedId, setLastClickedId)
 
   if (dashboard.unauthorized) {
     return (

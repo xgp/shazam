@@ -39,6 +39,7 @@ const PR_FRAGMENT = /* GraphQL */ `
       squashMergeAllowed
       mergeCommitAllowed
       rebaseMergeAllowed
+      viewerPermission
     }
     headRepository {
       ...RepoFields

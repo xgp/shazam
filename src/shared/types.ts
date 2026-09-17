@@ -39,6 +39,16 @@ export function mergeStateBlocks(state: MergeState): state is BlockingMergeState
   return (BLOCKING_MERGE_STATES as readonly MergeState[]).includes(state)
 }
 
+/**
+ * Whether reviews stand in the way of merging. `none` satisfies: it is what
+ * GitHub answers on a repo with no required-review rule - most personal
+ * projects - and GitHub merges those without an approval. Only a rule still
+ * waiting (`review_required`) or a standing objection blocks.
+ */
+export function reviewSatisfied(decision: ReviewDecision): boolean {
+  return decision === 'approved' || decision === 'none'
+}
+
 export interface RepoRef {
   /** e.g. "octocat/hello-world" */
   nameWithOwner: string
@@ -78,6 +88,12 @@ export interface PullRequestItem {
   deletions: number
   /** True when the viewer can merge it right now, per GitHub. */
   canMerge: boolean
+  /**
+   * Push access to the base repo (WRITE or better). Your own fork PR into
+   * someone else's repo is everything else on this card - open, yours,
+   * mergeable - and still not yours to merge.
+   */
+  viewerCanMerge: boolean
   /**
    * Merge methods the base repository actually permits, in preference order.
    * Empty when the repo has disabled all of them.

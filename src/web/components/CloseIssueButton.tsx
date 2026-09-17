@@ -49,6 +49,7 @@ export function CloseIssueButton({ issue, onDone }: { issue: IssueItem; onDone: 
         color="gray"
         primaryTooltip={`Close #${issue.number} now, no comment`}
         busy={busy}
+        cardAction="close"
         onPrimary={() => void close()}
         menu={[{ label: 'Close with comment…', onSelect: () => setOpen(true) }]}
       />

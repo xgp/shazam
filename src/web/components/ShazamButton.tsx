@@ -52,7 +52,9 @@ export function ShazamButton({ pr, agents, defaultAgent, onLaunched }: ShazamBut
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button size="xs" className={cn('text-sm', BUTTON_SOFT.gray)} disabled>
+          {/* Tagged even though inert: the shortcut handler checks disabled
+              itself, and finding a disabled button beats finding nothing. */}
+          <Button size="xs" className={cn('text-sm', BUTTON_SOFT.gray)} disabled data-card-action="shazam">
             <Zap /> Shazam
           </Button>
         </TooltipTrigger>
@@ -69,6 +71,9 @@ export function ShazamButton({ pr, agents, defaultAgent, onLaunched }: ShazamBut
             size="xs"
             className="rounded-r-none text-sm"
             disabled={busy}
+            // Only the primary half: the board's `s` shortcut means "launch
+            // the default agent", never "open the agent picker".
+            data-card-action="shazam"
             onClick={() => void launch(primary.id)}
           >
             {busy ? <Loader2 className="animate-spin" /> : <Zap />} Shazam

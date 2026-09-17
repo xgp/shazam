@@ -1,11 +1,12 @@
-import type {
-  CheckState,
-  IssueItem,
-  MergeMethod,
-  MergeableState,
-  PullRequestItem,
-  RepoRef,
-  ReviewDecision,
+import {
+  type CheckState,
+  type IssueItem,
+  type MergeMethod,
+  type MergeableState,
+  type PullRequestItem,
+  type RepoRef,
+  type ReviewDecision,
+  reviewSatisfied,
 } from '../../shared/types.js'
 
 interface RawRepo {
@@ -20,6 +21,16 @@ interface RawBaseRepo extends RawRepo {
   squashMergeAllowed: boolean
   mergeCommitAllowed: boolean
   rebaseMergeAllowed: boolean
+  /** Null for a repo the viewer can only see through the PR. */
+  viewerPermission: 'ADMIN' | 'MAINTAIN' | 'WRITE' | 'TRIAGE' | 'READ' | null
+}
+
+/** Merging needs push access: WRITE or better on the BASE repo. Your own PR
+ * from a fork does not carry it - the button must know the difference. */
+function viewerCanMerge(repo: RawBaseRepo): boolean {
+  return repo.viewerPermission === 'ADMIN' ||
+    repo.viewerPermission === 'MAINTAIN' ||
+    repo.viewerPermission === 'WRITE'
 }
 
 export interface RawPr {
@@ -166,10 +177,16 @@ export function normalizePr(raw: RawPr): PullRequestItem {
     changedFiles: raw.changedFiles,
     additions: raw.additions,
     deletions: raw.deletions,
-    // Approved, no conflicts, not a draft. A red check is deliberately not
-    // disqualifying on its own: unless a branch rule requires that check,
-    // GitHub merges it. applyMergeStates refines this with GitHub's own answer.
-    canMerge: !raw.isDraft && decision === 'approved' && merge !== 'conflicting',
+    // Push access, reviews satisfied, no conflicts, not a draft. A red check is
+    // deliberately not disqualifying on its own: unless a branch rule requires
+    // that check, GitHub merges it. applyMergeStates refines this with
+    // GitHub's own answer.
+    canMerge:
+      viewerCanMerge(raw.repository) &&
+      !raw.isDraft &&
+      reviewSatisfied(decision) &&
+      merge !== 'conflicting',
+    viewerCanMerge: viewerCanMerge(raw.repository),
     allowedMergeMethods: allowedMergeMethods(raw.repository),
   }
 }

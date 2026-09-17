@@ -1,5 +1,10 @@
 import { GraphqlResponseError } from '@octokit/graphql'
-import { type MergeState, type PullRequestItem, mergeStateBlocks } from '../../shared/types.js'
+import {
+  type MergeState,
+  type PullRequestItem,
+  mergeStateBlocks,
+  reviewSatisfied,
+} from '../../shared/types.js'
 import { getGraphqlClient } from './client.js'
 
 /**
@@ -61,7 +66,11 @@ function toMergeState(raw: string | null): MergeState {
  */
 export async function applyMergeStates(prs: PullRequestItem[]): Promise<void> {
   const candidates = prs.filter(
-    (pr) => !pr.isDraft && pr.reviewDecision === 'approved' && pr.mergeable !== 'conflicting',
+    (pr) =>
+      pr.viewerCanMerge &&
+      !pr.isDraft &&
+      reviewSatisfied(pr.reviewDecision) &&
+      pr.mergeable !== 'conflicting',
   )
   if (candidates.length === 0) return
 

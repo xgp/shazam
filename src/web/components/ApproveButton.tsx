@@ -49,6 +49,7 @@ export function ApproveButton({ pr, onDone }: { pr: PullRequestItem; onDone: () 
         color="green"
         primaryTooltip={`Approve #${pr.number} now, no comment`}
         busy={busy}
+        cardAction="approve"
         onPrimary={() => void approve()}
         menu={[{ label: 'Approve with comment…', onSelect: () => setOpen(true) }]}
       />
