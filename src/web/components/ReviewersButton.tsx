@@ -1,13 +1,13 @@
 import {
-  CircleCheck,
-  CircleMinus,
-  Ellipsis,
+  Ban,
   Loader2,
   MessageCircle,
-  Pencil,
   Plus,
   RefreshCw,
+  UserCheck,
+  UserPen,
   UserPlus,
+  UserSearch,
   X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -39,7 +39,7 @@ const STATE_LABEL: Record<ReviewerState, string> = {
 
 const STATE_COLOR: Record<ReviewerState, ChipColor> = {
   pending: 'amber',
-  approved: 'green',
+  approved: 'blue',
   changes_requested: 'red',
   commented: 'gray',
   dismissed: 'gray',
@@ -48,18 +48,23 @@ const STATE_COLOR: Record<ReviewerState, ChipColor> = {
 const countPending = (panel: ReviewersPanel): number =>
   panel.reviewers.filter((r) => r.state === 'pending').length
 
+/**
+ * The same person glyphs the card's ReviewChip uses, so "approved" looks the
+ * same wherever it appears - and blue rather than green for the same reason
+ * as there: the circled green check is CI's mark.
+ */
 function StateIcon({ state }: { state: ReviewerState }) {
   switch (state) {
     case 'approved':
-      return <CircleCheck />
+      return <UserCheck />
     case 'changes_requested':
-      return <Pencil />
+      return <UserPen />
     case 'commented':
       return <MessageCircle />
     case 'dismissed':
-      return <CircleMinus />
+      return <Ban />
     default:
-      return <Ellipsis />
+      return <UserSearch />
   }
 }
 
@@ -96,6 +101,9 @@ export function ReviewersButton({ pr, onChanged }: ReviewersButtonProps) {
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
+  /** Index into `matches` the arrow keys have reached; -1 = nothing chosen. */
+  const [highlight, setHighlight] = useState(-1)
+  const listRef = useRef<HTMLDivElement>(null)
   /** The last count read straight from the PR, and the dashboard's number at
    *  the time, so we can tell when the dashboard has caught up. */
   const [observed, setObserved] = useState<{ pending: number; fromDashboard: number } | null>(null)
@@ -172,6 +180,19 @@ export function ReviewersButton({ pr, onChanged }: ReviewersButtonProps) {
     )
   }, [panel?.candidates, query])
 
+  // Any refilter drops the highlight: the same index would silently point at
+  // a different person.
+  useEffect(() => {
+    setHighlight(-1)
+  }, [matches])
+
+  // Focus stays in the search box, so the list cannot scroll itself; follow
+  // the highlight the way a focused row would follow focus.
+  useEffect(() => {
+    if (highlight < 0) return
+    listRef.current?.querySelector('[data-highlighted]')?.scrollIntoView({ block: 'nearest' })
+  }, [highlight])
+
   const edit = async (add: string[], remove: string[], what: string) => {
     setBusy(add[0] ?? remove[0] ?? '')
     try {
@@ -213,6 +234,8 @@ export function ReviewersButton({ pr, onChanged }: ReviewersButtonProps) {
             <Button
               size="xs"
               aria-label="Request reviewers"
+              // The board's `r` shortcut clicks this to open the popover.
+              data-card-action="reviewers"
               className={cn('text-sm', BUTTON_SOFT[pending > 0 ? 'amber' : 'gray'])}
             >
               <UserPlus />
@@ -267,21 +290,63 @@ export function ReviewersButton({ pr, onChanged }: ReviewersButtonProps) {
                 placeholder="Add a reviewer…"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                // Combobox keys without moving focus: the arrows walk the
+                // candidate list below and Enter adds, so add-by-keyboard is
+                // type, arrow, Enter without ever leaving the box.
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowDown') {
+                    event.preventDefault()
+                    setHighlight((current) => Math.min(matches.length - 1, current + 1))
+                  } else if (event.key === 'ArrowUp') {
+                    event.preventDefault()
+                    setHighlight((current) => (current <= 0 ? current : current - 1))
+                  } else if (event.key === 'Enter') {
+                    // A lone match needs no arrow first; several without a
+                    // highlight is an ambiguous Enter, so it does nothing.
+                    const pick =
+                      highlight >= 0
+                        ? matches[highlight]
+                        : matches.length === 1
+                          ? matches[0]
+                          : undefined
+                    if (!pick || busy !== null) return
+                    event.preventDefault()
+                    void edit([pick.login], [], `Asked ${pick.login} to review`)
+                  }
+                }}
+                role="combobox"
+                aria-expanded={matches.length > 0}
+                aria-controls="reviewer-candidates"
+                aria-autocomplete="list"
+                aria-activedescendant={
+                  highlight >= 0 && matches[highlight]
+                    ? `reviewer-candidate-${matches[highlight].login}`
+                    : undefined
+                }
                 autoFocus
               />
               {/* Long collaborator lists scroll; the search box above stays put. */}
-              <div className="max-h-60 overflow-y-auto overscroll-contain">
+              <div ref={listRef} className="max-h-60 overflow-y-auto overscroll-contain">
                 {matches.length === 0 ? (
                   <span className="text-xs text-muted-foreground">
                     {panel ? 'No collaborator matches that.' : ''}
                   </span>
                 ) : (
-                  <div className="flex flex-col gap-1">
-                    {matches.map((candidate) => (
+                  <div id="reviewer-candidates" role="listbox" className="flex flex-col gap-1">
+                    {matches.map((candidate, index) => (
                       <button
                         key={candidate.login}
+                        id={`reviewer-candidate-${candidate.login}`}
                         type="button"
-                        className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1 hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+                        role="option"
+                        aria-selected={index === highlight}
+                        data-highlighted={index === highlight || undefined}
+                        className={cn(
+                          'flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1 hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent',
+                          // The keyboard highlight wears the hover coat: one
+                          // look for "this row is the one", however reached.
+                          index === highlight && 'bg-accent',
+                        )}
                         disabled={busy !== null}
                         onClick={() =>
                           void edit([candidate.login], [], `Asked ${candidate.login} to review`)
@@ -322,10 +387,16 @@ function ReviewerRow({
       {/* A login and a real name both want the room, so both may be truncated. */}
       <Person login={reviewer.login} name={reviewer.name} avatarUrl={reviewer.avatarUrl} />
       <span className="flex shrink-0 items-center gap-1">
-        <Badge className={CHIP_SOFT[STATE_COLOR[reviewer.state]]}>
-          <StateIcon state={reviewer.state} />
-          {STATE_LABEL[reviewer.state]}
-        </Badge>
+        {/* Icon-only, sized like the card chips; the word lives in the
+            tooltip, the same trade the card's ReviewChip makes. */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge className={cn('h-6.5 text-sm [&>svg]:size-4', CHIP_SOFT[STATE_COLOR[reviewer.state]])}>
+              <StateIcon state={reviewer.state} />
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>{STATE_LABEL[reviewer.state]}</TooltipContent>
+        </Tooltip>
         {busy ? <Loader2 className="size-3 animate-spin" /> : null}
         {/* Someone who has already answered can be asked again - a review goes
             stale the moment you push, and this is GitHub's re-request arrow. */}

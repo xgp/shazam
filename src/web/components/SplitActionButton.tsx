@@ -23,6 +23,12 @@ export interface SplitActionButtonProps {
   busy?: boolean
   /** When set the button is inert and the text explains why. */
   blockedReason?: string | null
+  /**
+   * Stamped on the primary half as data-card-action, so the board's single-key
+   * shortcuts can find and click this button on the selected card. The caret
+   * half stays untagged: a shortcut always means the primary action.
+   */
+  cardAction?: string
   onPrimary: () => void
   menu: { label: string; onSelect: () => void }[]
 }
@@ -39,6 +45,7 @@ export function SplitActionButton({
   primaryTooltip,
   busy,
   blockedReason,
+  cardAction,
   onPrimary,
   menu,
 }: SplitActionButtonProps) {
@@ -46,7 +53,9 @@ export function SplitActionButton({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button size="xs" className={cn('text-sm', BUTTON_SOFT.gray)} disabled>
+          {/* Tagged even though inert: the shortcut handler checks disabled
+              itself, and finding a disabled button beats finding nothing. */}
+          <Button size="xs" className={cn('text-sm', BUTTON_SOFT.gray)} disabled data-card-action={cardAction}>
             {label}
           </Button>
         </TooltipTrigger>
@@ -63,6 +72,7 @@ export function SplitActionButton({
             size="xs"
             className={cn('rounded-r-none text-sm', BUTTON_SOFT[color])}
             disabled={busy}
+            data-card-action={cardAction}
             onClick={onPrimary}
           >
             {busy ? <Loader2 className="animate-spin" /> : null}
