@@ -347,7 +347,10 @@ a preflight entry.
 - Each column is capped at `perColumnLimit` (100, GitHub's own ceiling for a
   search page); there is no pagination beyond that.
 - Merge does not delete the branch, wait for a merge queue, or offer auto-merge.
-- Sessions live in the server process; restarting `shazam` ends them.
+- Sessions live in the server process; restarting `shazam` ends them. A way
+  out is sketched in
+  [docs/proposals/detached-sessions-and-state.md](docs/proposals/detached-sessions-and-state.md),
+  along with persistent state and auto-started sessions.
 
 ## Assumptions
 
