@@ -8,6 +8,8 @@ import { absoluteTime, relativeTime } from '../lib/format.js'
 import { AuthorAvatar } from './AuthorAvatar.js'
 import { CloseIssueButton } from './CloseIssueButton.js'
 import { CopyLinkButton } from './CopyLinkButton.js'
+import { SessionBadge } from './SessionBadge.js'
+import { IssueShazamButton } from './ShazamButton.js'
 import { CommentsChip } from './StatusIcons.js'
 import { useCardLink } from './useCardLink.js'
 import type { ColumnContext } from './registry.js'
@@ -82,6 +84,12 @@ export function IssueCard({ issue, ctx }: { issue: IssueItem; ctx: ColumnContext
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        {ctx.sessionsByItem.get(issue.id) ? (
+          <SessionBadge
+            session={ctx.sessionsByItem.get(issue.id)!}
+            onReveal={ctx.onRevealSession}
+          />
+        ) : null}
         <CommentsChip
           count={issue.commentCount}
           repo={issue.repo.nameWithOwner}
@@ -96,6 +104,12 @@ export function IssueCard({ issue, ctx }: { issue: IssueItem; ctx: ColumnContext
       </div>
 
       <div className="mt-1.5 flex items-center justify-end gap-2">
+        <IssueShazamButton
+          issue={issue}
+          agents={ctx.agents}
+          defaultAgent={ctx.defaultAgent}
+          onLaunched={ctx.onSessionLaunched}
+        />
         <CloseIssueButton issue={issue} onDone={() => ctx.onActioned(issue.id)} />
       </div>
     </Card>

@@ -100,6 +100,8 @@ export function App() {
   // from GitHub or an agent session. Deliberately not persisted: it is a marker
   // for the current sitting, not a saved selection.
   const [lastClickedId, setLastClickedId] = useState<string | null>(null)
+  // Lifted out of the dock so a badge on the board can expand it.
+  const [dockCollapsed, setDockCollapsed] = useState(false)
   /**
    * Rows hidden because you just acted on them. A refresh is not enough on its
    * own: GitHub's search index lags, so an approved PR keeps matching
@@ -211,12 +213,40 @@ export function App() {
       .sort((a, b) => b.count - a.count || a.owner.localeCompare(b.owner))
   }, [data])
 
+  /**
+   * One badge per row, so when an item has been shazammed more than once the
+   * live session wins over a finished one - a row with a running agent and an
+   * old exited session should read as running.
+   */
+  const sessionsByItem = useMemo(() => {
+    const byItem = new Map<string, AgentSession>()
+    for (const session of sessions.sessions) {
+      if (!session.itemId) continue
+      const held = byItem.get(session.itemId)
+      const live = (s: AgentSession) => s.status === 'running' || s.status === 'preparing'
+      if (!held || (live(session) && !live(held))) byItem.set(session.itemId, session)
+    }
+    return byItem
+  }, [sessions.sessions])
+
+  // The dock is hidden until there is something in it, so revealing a session
+  // means un-collapsing as well as selecting.
+  const revealSession = useCallback(
+    (id: string) => {
+      sessions.setActiveId(id)
+      setDockCollapsed(false)
+    },
+    [sessions],
+  )
+
   const ctx: ColumnContext = useMemo(
     () => ({
       viewer: data?.viewer ?? '',
       agents: health?.agents ?? [],
       defaultMergeMethod: health?.defaultMergeMethod ?? 'squash',
       defaultAgent: health?.defaultAgent ?? 'claude',
+      sessionsByItem,
+      onRevealSession: revealSession,
       onSessionLaunched: (session: AgentSession) => sessions.add(session),
       onActioned: (itemId: string) => {
         setDismissed((current) => new Map(current).set(itemId, Date.now() + DISMISS_MS))
@@ -231,6 +261,8 @@ export function App() {
       health?.agents,
       health?.defaultMergeMethod,
       health?.defaultAgent,
+      sessionsByItem,
+      revealSession,
       sessions,
       dashboard,
       lastClickedId,
@@ -483,10 +515,14 @@ export function App() {
             sessions={sessions.sessions}
             activeId={sessions.activeId}
             appearance={appearance}
+            collapsed={dockCollapsed}
+            onCollapsedChange={setDockCollapsed}
             onSelect={sessions.setActiveId}
             onClose={(id) => void sessions.close(id)}
             fontSize={health?.terminalFontSize ?? 20}
             onStatus={(session) => sessions.update(session)}
+            onShowItem={focusItem}
+            onSessionsChanged={() => void sessions.reload()}
           />
           <KeyboardHelp />
           <BoardAlerts data={data} enabled={alertsOn} onFocusItem={focusItem} />

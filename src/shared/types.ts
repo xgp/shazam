@@ -272,22 +272,39 @@ export type AgentId = 'claude' | 'codex'
  * What a session is being opened to do, which in practice is a choice of
  * opening prompt. `brief` reads the pull request and waits for instruction;
  * `address` goes straight at the changes a reviewer asked for; `conflict`
- * goes at the merge conflict holding the branch up.
+ * goes at the merge conflict holding the branch up; `issue` is handed an issue
+ * to investigate and, where it can judge the work safe, implement.
  */
-export type ShazamIntent = 'brief' | 'address' | 'conflict'
+export type ShazamIntent = 'brief' | 'address' | 'conflict' | 'issue'
 
 export type SessionStatus = 'preparing' | 'running' | 'exited' | 'failed'
+
+/**
+ * What a running agent is doing, inferred from whether it is still writing to
+ * its terminal: a stretch of silence means it has said its piece and is
+ * waiting on you. A heuristic, but the only signal a PTY actually offers - no
+ * agent reports "I am done" in a way we could read.
+ */
+export type SessionActivity = 'working' | 'waiting'
 
 export interface AgentSession {
   id: string
   agent: AgentId
   status: SessionStatus
+  /** Null unless the session is running. */
+  activity: SessionActivity | null
   title: string
-  prUrl: string
+  /** Whether this session was launched from a pull request or an issue. */
+  kind: 'pull_request' | 'issue'
+  /** The dashboard row it came from, so the board can scroll back to it. */
+  itemId: string
+  itemUrl: string
+  itemNumber: number
   repo: string
-  prNumber: number
   branch: string
   worktreePath: string | null
+  /** Session id of the companion shell, when one has been opened. */
+  terminalId: string | null
   startedAt: string
   exitCode: number | null
   /** Populated while status is 'preparing' or on 'failed'. */

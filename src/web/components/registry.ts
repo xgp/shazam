@@ -17,6 +17,10 @@ export interface ColumnContext {
   defaultMergeMethod: MergeMethod
   /** Agent a plain Shazam click opens, from config. */
   defaultAgent: AgentId
+  /** Live agent sessions keyed by the dashboard row each was launched from. */
+  sessionsByItem: Map<string, AgentSession>
+  /** Brings the dock to a session's tab and expands it. */
+  onRevealSession: (sessionId: string) => void
   onSessionLaunched: (session: AgentSession) => void
   /**
    * Called with the item's id after an action that changes GitHub state. It

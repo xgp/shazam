@@ -14,6 +14,9 @@ export interface SessionsState {
   reload: () => Promise<void>
 }
 
+/** Fast enough that a pulse starts within a beat of the agent going quiet. */
+const POLL_MS = 1_500
+
 export function useSessions(): SessionsState {
   const [sessions, setSessions] = useState<AgentSession[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -21,7 +24,13 @@ export function useSessions(): SessionsState {
   const reload = useCallback(async () => {
     try {
       const next = await api.sessions()
-      setSessions(next)
+      setSessions((current) => {
+        // A session launched a moment ago may not be in this response yet;
+        // dropping it would make the dock's new tab flicker out and back.
+        const known = new Set(next.map((s) => s.id))
+        const pending = current.filter((s) => !known.has(s.id) && s.status === 'preparing')
+        return [...pending, ...next]
+      })
       // Keep a selection alive if the one we were showing disappeared.
       setActiveId((current) =>
         current && next.some((s) => s.id === current) ? current : (next[0]?.id ?? null),
@@ -31,8 +40,25 @@ export function useSessions(): SessionsState {
     }
   }, [])
 
+  /**
+   * Polled, not pushed. Only the session you are looking at has a websocket
+   * open, so the status messages the others emit reach nobody - and the badges
+   * on the board need to know which agent has gone quiet. The list is held in
+   * memory on localhost, so asking twice a second costs nothing worth saving.
+   */
   useEffect(() => {
     void reload()
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') void reload()
+    }, POLL_MS)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void reload()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [reload])
 
   const add = useCallback((session: AgentSession) => {

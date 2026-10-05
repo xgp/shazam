@@ -10,6 +10,7 @@ import { AuthorAvatar } from './AuthorAvatar.js'
 import { CopyLinkButton } from './CopyLinkButton.js'
 import { MergeButton } from './MergeButton.js'
 import { ReviewersButton } from './ReviewersButton.js'
+import { SessionBadge } from './SessionBadge.js'
 import { ShazamButton } from './ShazamButton.js'
 import {
   ChecksChip,
@@ -80,6 +81,12 @@ export function PrCard({ pr, ctx, action }: PrCardProps) {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        {ctx.sessionsByItem.get(pr.id) ? (
+          <SessionBadge
+            session={ctx.sessionsByItem.get(pr.id)!}
+            onReveal={ctx.onRevealSession}
+          />
+        ) : null}
         <DraftChip isDraft={pr.isDraft} />
         <ChecksChip state={pr.checks} prUrl={pr.url} />
         <ReviewChip decision={pr.reviewDecision} />

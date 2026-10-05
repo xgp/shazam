@@ -5,6 +5,7 @@ import type {
   CommentThread,
   DashboardData,
   HealthReport,
+  IssueItem,
   MergeMethod,
   PullRequestItem,
   ReviewersPanel,
@@ -78,7 +79,9 @@ export const api = {
     post<AgentSession>('/api/sessions', {
       agent,
       intent,
-      pr: {
+      item: {
+        kind: 'pull_request',
+        id: pr.id,
         url: pr.url,
         number: pr.number,
         headRef: pr.headRef,
@@ -88,7 +91,22 @@ export const api = {
           : null,
       },
     }),
+  shazamIssue: (issue: IssueItem, agent: AgentId) =>
+    post<AgentSession>('/api/sessions', {
+      agent,
+      intent: 'issue',
+      item: {
+        kind: 'issue',
+        id: issue.id,
+        url: issue.url,
+        number: issue.number,
+        repo: { nameWithOwner: issue.repo.nameWithOwner },
+      },
+    }),
   closeSession: (id: string) => request<ActionResult>(`/api/sessions/${id}`, { method: 'DELETE' }),
+  openTerminal: (id: string) => post<AgentSession>(`/api/sessions/${id}/terminal`),
+  closeTerminal: (id: string) =>
+    request<ActionResult>(`/api/sessions/${id}/terminal`, { method: 'DELETE' }),
 }
 
 /** The websocket cannot set headers, so the token rides in the query string. */

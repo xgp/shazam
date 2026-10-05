@@ -247,3 +247,35 @@
 .terminal-host .xterm {
   height: 100%;
 }
+
+/* --- a session wanting your attention ----------------------------------- */
+
+/*
+ * Slow on purpose. A session that has stopped and is waiting on you is not an
+ * emergency, it is a standing request, and the badge has to survive sitting in
+ * the corner of your eye for several minutes without becoming something you
+ * train yourself to ignore.
+ */
+@keyframes session-wait {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.animate-session-wait {
+  animation: session-wait 2.4s ease-in-out infinite;
+}
+
+/* Honour a stated preference for less motion: keep the state, drop the pulse
+   and say it with a ring instead. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-session-wait {
+    animation: none;
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+}

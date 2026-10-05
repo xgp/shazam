@@ -25,6 +25,8 @@ export interface TerminalPaneProps {
   appearance: 'light' | 'dark'
   /** Dock height. Changes are a signal to refit, not a style. */
   height: number
+  /** Pane width, for the same reason: dragging the split must refit too. */
+  width?: number
   fontSize: number
   onStatus: (session: AgentSession) => void
 }
@@ -33,6 +35,7 @@ export function TerminalPane({
   session,
   appearance,
   height,
+  width,
   fontSize,
   onStatus,
 }: TerminalPaneProps) {
@@ -139,7 +142,7 @@ export function TerminalPane({
   useEffect(() => {
     const timer = setTimeout(() => syncRef.current(), 0)
     return () => clearTimeout(timer)
-  }, [height])
+  }, [height, width])
 
   return <div ref={hostRef} className="terminal-host" />
 }

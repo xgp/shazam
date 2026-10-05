@@ -42,8 +42,8 @@ Four columns, each sorted by last updated, descending:
 - **Waiting on my review** — PRs where review is requested from you and you have
   not reviewed yet (`review-requested:@me -reviewed-by:@me`). Same status icons,
   plus an **Approve** button.
-- **Issues I opened** — `author:@me`, with comment counts and labels, and a
-  **Close** button.
+- **Issues I opened** — `author:@me`, with comment counts and labels, a
+  **Shazam** button and a **Close** button.
 - **Assigned to me** — `assignee:@me -author:@me`. The exclusion keeps the two
   issue columns disjoint, the same way *Waiting on my review* excludes your own
   PRs, so assigning yourself to your own issue does not list it twice. These
@@ -209,6 +209,48 @@ branch, in one click:
 A fork PR's branch is namespaced `pr-<n>-<branch>` so a fork branch called `main`
 cannot clobber the base repo's `main`.
 
+### Shazam on an issue
+
+Issues carry the same button, and it does the same thing with one difference:
+an issue has no branch to check out, so the worktree is cut fresh from the
+repository's default branch onto `issue-<n>`, with the push target already
+named so the agent's plain `git push` creates it. Two issues in the same
+repository therefore cannot collide over a checkout.
+
+The prompt is a different animal from the PR ones. It hands the agent the issue
+and asks it to decide for itself whether the work is safe to do unsupervised -
+bounded, no consequential architecture call, no breaking contract or risky
+migration, verifiable with the tools to hand - and to implement, test, push and
+open a linked PR when it is, or to come back with a plan and the specific
+questions when it is not. It authorizes the branch, the push and the PR, and
+nothing beyond them.
+
+### While a session is running
+
+A row with an agent on it grows a badge among its chips: green and spinning
+while the agent is writing, amber and slowly pulsing once it has gone quiet and
+is waiting on you. Clicking the badge opens that session's tab, expanding the
+dock if it was collapsed. The dock's own tabs carry the same colour, so a board
+with six sessions on it tells you which one wants something without opening any
+of them.
+
+"Waiting" is a heuristic, and worth knowing as one: nothing an agent writes to
+a terminal says *I am done*, so shazam watches the output and calls a session
+waiting once it has been silent for a couple of seconds. An agent that pauses
+to think for longer than that will show as waiting until it writes again.
+
+The pulse is reserved for that one state, because a badge that always pulses is
+a badge you stop seeing. Under `prefers-reduced-motion` it becomes a ring.
+
+Each tab has a menu, on the caret or on a right-click:
+
+- **Show PR / issue** scrolls the board to the row the session was launched
+  from and rings it — which is the point when a dozen sessions are open and the
+  titles have stopped being enough.
+- **Open terminal** splits the pane and puts a login shell in the agent's own
+  worktree on the right, for the `git log` or the build you want to run without
+  interrupting it. Drag the divider; both halves reflow.
+
 The primary half opens `defaultAgent`; the caret picks the other one. Agents
 that were not found on `PATH` at startup are disabled rather than hidden, and
 `defaultAgent` falls back to whichever one is installed.
@@ -250,13 +292,15 @@ Optional, at `~/.shazam/config.json`:
   "terminalFontSize": 20,
   "shazamPrompt": "You are working on pull request {url}. ...",
   "shazamChangesPrompt": "You are working on pull request {url}, where a reviewer has requested changes. ...",
-  "shazamConflictPrompt": "You are working on pull request {url}, which has a merge conflict with its base branch. ..."
+  "shazamConflictPrompt": "You are working on pull request {url}, which has a merge conflict with its base branch. ...",
+  "shazamIssuePrompt": "You are given a GitHub issue: {url} in {repo}. ..."
 }
 ```
 
-`shazamPrompt` is what a plain Shazam opens with; `shazamChangesPrompt` and
-`shazamConflictPrompt` are what the two wrenches open with. All three
-substitute `{url}`, `{number}`, `{repo}`, `{path}` and `{branch}`.
+`shazamPrompt` is what a plain Shazam on a PR opens with; `shazamChangesPrompt`
+and `shazamConflictPrompt` are what the two wrenches open with;
+`shazamIssuePrompt` is what Shazam on an issue opens with. All four substitute
+`{url}`, `{number}`, `{repo}`, `{path}` and `{branch}`.
 
 `defaultAgent` is the agent both of them open — the primary half of the Shazam
 split button, and the wrench. Where that agent is not installed, they fall back

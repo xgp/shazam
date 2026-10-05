@@ -82,10 +82,11 @@ export interface PromptContext {
 
 export function buildPrompt(ctx: PromptContext): string {
   const config = loadConfig()
-  const template = {
+  const template: string = {
     brief: config.shazamPrompt,
     address: config.shazamChangesPrompt,
     conflict: config.shazamConflictPrompt,
+    issue: config.shazamIssuePrompt,
   }[ctx.intent]
   return template
     .replaceAll('{url}', ctx.pr.url)

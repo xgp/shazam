@@ -14,14 +14,25 @@ const repoRefSchema = z.object({ nameWithOwner: z.string().min(1), url: z.string
 
 const shazamSchema = z.object({
   agent: z.enum(['claude', 'codex']),
-  intent: z.enum(['brief', 'address', 'conflict']).default('brief'),
-  pr: z.object({
-    url: z.string().url(),
-    number: z.number().int().positive(),
-    headRef: z.string().min(1),
-    repo: z.object({ nameWithOwner: z.string().min(1) }),
-    headRepo: repoRefSchema.nullable().default(null),
-  }),
+  intent: z.enum(['brief', 'address', 'conflict', 'issue']).default('brief'),
+  item: z.discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('pull_request'),
+      id: z.string().min(1),
+      url: z.string().url(),
+      number: z.number().int().positive(),
+      headRef: z.string().min(1),
+      repo: z.object({ nameWithOwner: z.string().min(1) }),
+      headRepo: repoRefSchema.nullable().default(null),
+    }),
+    z.object({
+      kind: z.literal('issue'),
+      id: z.string().min(1),
+      url: z.string().url(),
+      number: z.number().int().positive(),
+      repo: z.object({ nameWithOwner: z.string().min(1) }),
+    }),
+  ]),
 })
 
 const mergeSchema = z.object({
@@ -166,5 +177,23 @@ export function registerApiRoutes(app: FastifyInstance, deps: ApiDeps): void {
     const closed = sessions.close(request.params.id)
     if (!closed) return reply.code(404).send({ ok: false, message: 'No such session' })
     return { ok: true, message: 'Session closed' }
+  })
+
+  // A companion shell in the agent's own worktree, opened beside it.
+  app.post<{ Params: { id: string } }>('/api/sessions/:id/terminal', async (request, reply) => {
+    try {
+      const terminal = await sessions.openTerminal(request.params.id)
+      if (!terminal) return reply.code(404).send({ ok: false, message: 'No such session' })
+      return terminal
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return reply.code(409).send({ ok: false, message })
+    }
+  })
+
+  app.delete<{ Params: { id: string } }>('/api/sessions/:id/terminal', async (request, reply) => {
+    const closed = sessions.closeTerminal(request.params.id)
+    if (!closed) return reply.code(404).send({ ok: false, message: 'No terminal open' })
+    return { ok: true, message: 'Terminal closed' }
   })
 }
