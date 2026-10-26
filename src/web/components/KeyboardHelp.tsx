@@ -15,6 +15,7 @@ const SHORTCUTS: [keys: string[], what: string][] = [
   [['←', '→'], 'Same row in the next column over'],
   [['Enter', 'o'], 'Open the selected card on GitHub'],
   [['r', 's', 'm', 'a', 'c'], 'Reviewers / Shazam / Merge / Approve / Close it'],
+  [['p'], 'Ping its reviewers in a comment'],
   [['?'], 'These shortcuts'],
 ]
 

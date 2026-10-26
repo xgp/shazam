@@ -68,7 +68,7 @@ function StateIcon({ state }: { state: ReviewerState }) {
   }
 }
 
-function Person({ login, name, avatarUrl }: ReviewerCandidate) {
+export function Person({ login, name, avatarUrl }: ReviewerCandidate) {
   return (
     <span className="flex min-w-0 items-center gap-2">
       <Avatar className="size-5">

@@ -76,9 +76,9 @@ function diffBoard(prev: DashboardData, next: DashboardData): AlertLine[] {
 }
 
 /**
- * Watches the poll stream and surfaces changes: as toasts while you are
- * looking at the board, as one batched desktop notification per poll when you
- * are not. Renders nothing.
+ * Watches the poll stream and surfaces changes: as toasts while the board has
+ * focus, as one batched desktop notification per poll when it does not.
+ * Renders nothing.
  */
 export function BoardAlerts({ data, enabled, onFocusItem }: BoardAlertsProps) {
   const toast = useToast()
@@ -100,7 +100,10 @@ export function BoardAlerts({ data, enabled, onFocusItem }: BoardAlertsProps) {
     if (lines.length === 0) return
 
     const canNotify = typeof Notification !== 'undefined' && Notification.permission === 'granted'
-    if (document.visibilityState === 'visible' || !canNotify) {
+    // Focus, not visibility: a window behind another app or on another monitor
+    // still reports 'visible' unless it is minimized or fully covered, so a
+    // visibility check toasts into a window nobody is looking at.
+    if (document.hasFocus() || !canNotify) {
       for (const line of lines) toast(line.message, line.tone)
       return
     }

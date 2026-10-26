@@ -24,6 +24,7 @@ const ACTION_KEYS: Record<string, string> = {
   m: 'merge',
   a: 'approve',
   c: 'close',
+  p: 'ping',
 }
 
 const scrollToCard = (id: string) => {
@@ -38,7 +39,7 @@ const scrollToCard = (id: string) => {
 /**
  * Keyboard cursor over the visible cards: j/k walk every card in reading
  * order, the arrows treat the board as the 2D grid it looks like, Enter/o
- * open the selection, and r/s/m/a/c press the selected card's own action
+ * open the selection, and r/s/m/a/c/p press the selected card's own action
  * buttons. There is no separate "keyboard selection" state: the
  * cursor IS lastClickedId, so a click and a keypress move the same marker and
  * the card shows the same ring either way - two selection mechanisms fighting

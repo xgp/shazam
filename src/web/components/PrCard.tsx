@@ -9,6 +9,7 @@ import { ApproveButton } from './ApproveButton.js'
 import { AuthorAvatar } from './AuthorAvatar.js'
 import { CopyLinkButton } from './CopyLinkButton.js'
 import { MergeButton } from './MergeButton.js'
+import { PingReviewersButton } from './PingReviewersButton.js'
 import { ReviewersButton } from './ReviewersButton.js'
 import { SessionBadge } from './SessionBadge.js'
 import { ShazamButton } from './ShazamButton.js'
@@ -18,6 +19,7 @@ import {
   ConflictChip,
   DiffStat,
   DraftChip,
+  MergedChip,
   ReviewChip,
 } from './StatusIcons.js'
 import { useCardLink } from './useCardLink.js'
@@ -31,6 +33,9 @@ export interface PrCardProps {
 }
 
 export function PrCard({ pr, ctx, action }: PrCardProps) {
+  // A merged PR is done: its card keeps the way back to GitHub and drops
+  // every control that would act on a branch that has landed.
+  const merged = pr.mergedAt !== null
   const onLaunched = (session: AgentSession) => ctx.onSessionLaunched(session)
   const link = useCardLink({
     id: pr.id,
@@ -87,10 +92,11 @@ export function PrCard({ pr, ctx, action }: PrCardProps) {
             onReveal={ctx.onRevealSession}
           />
         ) : null}
+        <MergedChip mergedAt={pr.mergedAt} mergedBy={pr.mergedBy} />
         <DraftChip isDraft={pr.isDraft} />
         <ChecksChip state={pr.checks} prUrl={pr.url} />
         <ReviewChip decision={pr.reviewDecision} />
-        {pr.reviewDecision === 'changes_requested' ? (
+        {!merged && pr.reviewDecision === 'changes_requested' ? (
           <FixChangesButton
             pr={pr}
             agents={ctx.agents}
@@ -98,8 +104,8 @@ export function PrCard({ pr, ctx, action }: PrCardProps) {
             onLaunched={onLaunched}
           />
         ) : null}
-        <ConflictChip state={pr.mergeable} prUrl={pr.url} />
-        {pr.mergeable === 'conflicting' ? (
+        {!merged ? <ConflictChip state={pr.mergeable} prUrl={pr.url} /> : null}
+        {!merged && pr.mergeable === 'conflicting' ? (
           <FixConflictButton
             pr={pr}
             agents={ctx.agents}
@@ -119,19 +125,26 @@ export function PrCard({ pr, ctx, action }: PrCardProps) {
 
       {/* mt-1.5 on top of the card's gap: the buttons read as their own row,
           not part of the chip cluster. */}
-      <div className="mt-1.5 flex items-center justify-end gap-2">
-        {action === 'merge' ? <ReviewersButton pr={pr} onChanged={ctx.onChanged} /> : null}
-        <ShazamButton
-          pr={pr}
-          agents={ctx.agents}
-          defaultAgent={ctx.defaultAgent}
-          onLaunched={onLaunched}
-        />
-        {action === 'merge' ? (
-          <MergeButton pr={pr} defaultMethod={ctx.defaultMergeMethod} onDone={() => ctx.onActioned(pr.id)} />
-        ) : null}
-        {action === 'approve' ? <ApproveButton pr={pr} onDone={() => ctx.onActioned(pr.id)} /> : null}
-      </div>
+      {!merged ? (
+        <div className="mt-1.5 flex items-center justify-end gap-2">
+          {/* Nudging reviewers is the author's move; on someone else's PR in
+              the approved column it would be speaking for them. */}
+          {action === 'merge' && pr.author === ctx.viewer ? (
+            <PingReviewersButton pr={pr} onDone={ctx.onChanged} />
+          ) : null}
+          {action === 'merge' ? <ReviewersButton pr={pr} onChanged={ctx.onChanged} /> : null}
+          <ShazamButton
+            pr={pr}
+            agents={ctx.agents}
+            defaultAgent={ctx.defaultAgent}
+            onLaunched={onLaunched}
+          />
+          {action === 'merge' ? (
+            <MergeButton pr={pr} defaultMethod={ctx.defaultMergeMethod} onDone={() => ctx.onActioned(pr.id)} />
+          ) : null}
+          {action === 'approve' ? <ApproveButton pr={pr} onDone={() => ctx.onActioned(pr.id)} /> : null}
+        </div>
+      ) : null}
     </Card>
   )
 }

@@ -7,10 +7,10 @@
  * dark backgrounds.
  */
 
-export type ChipColor = 'green' | 'blue' | 'red' | 'amber' | 'orange' | 'gray'
+export type ChipColor = 'green' | 'blue' | 'red' | 'amber' | 'orange' | 'violet' | 'gray'
 
 /** Colors that exist only as soft chips, not as solid fills or buttons. */
-type ChipOnlyColor = 'orange' | 'blue'
+type ChipOnlyColor = 'orange' | 'blue' | 'violet'
 
 export const CHIP_SOFT: Record<ChipColor, string> = {
   green: 'bg-success/15 text-emerald-700 dark:bg-success/15 dark:text-success',
@@ -18,6 +18,7 @@ export const CHIP_SOFT: Record<ChipColor, string> = {
   red: 'bg-destructive/10 text-red-700 dark:bg-destructive/15 dark:text-red-400',
   amber: 'bg-warning/15 text-amber-700 dark:bg-warning/15 dark:text-warning',
   orange: 'bg-orange-500/15 text-orange-700 dark:bg-orange-400/15 dark:text-orange-400',
+  violet: 'bg-violet-500/15 text-violet-700 dark:bg-violet-400/15 dark:text-violet-400',
   gray: 'bg-secondary text-muted-foreground',
 }
 

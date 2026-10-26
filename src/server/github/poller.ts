@@ -2,6 +2,7 @@ import { GraphqlResponseError } from '@octokit/graphql'
 import {
   type ColumnId,
   type DashboardData,
+  MERGED_LOOKBACK_DAYS,
   type PullRequestItem,
   mergeStateBlocks,
 } from '../../shared/types.js'
@@ -10,14 +11,17 @@ import { getGraphqlClient, resetClient } from './client.js'
 import { applyMergeStates } from './mergeState.js'
 import {
   normalizeIssue,
+  normalizeMergedPr,
   normalizePr,
   type RawIssue,
+  type RawMergedPr,
   type RawPr,
   viewerApproved,
 } from './normalize.js'
 import {
   APPROVED_PR_SEARCH_QUERY,
   ISSUE_SEARCH_QUERY,
+  MERGED_PR_SEARCH_QUERY,
   PR_SEARCH_QUERY,
   SEARCH_QUERIES,
 } from './queries.js'
@@ -50,6 +54,12 @@ export const isOpen = <T extends { state?: string }>(node: T): boolean =>
 
 const byUpdatedDesc = <T extends { updatedAt: string }>(a: T, b: T) =>
   b.updatedAt.localeCompare(a.updatedAt)
+
+/** Search cannot sort by merge time, so the merged column sorts itself. */
+const byMergedDesc = (a: PullRequestItem, b: PullRequestItem) =>
+  (b.mergedAt ?? '').localeCompare(a.mergedAt ?? '')
+
+const DAY_MS = 24 * 60 * 60 * 1000
 
 
 /**
@@ -84,6 +94,8 @@ async function fetchSearch<T extends { id?: string; state?: string }>(
   query: string,
   search: string,
   limit: number,
+  /** The merged column wants exactly the rows `isOpen` exists to drop. */
+  keep: (node: T) => boolean = isOpen,
 ): Promise<{ rows: T[]; viewer: string; rateLimit: RateLimit | null }> {
   const client = await getGraphqlClient()
 
@@ -101,7 +113,7 @@ async function fetchSearch<T extends { id?: string; state?: string }>(
   }
 
   return {
-    rows: present(data.search?.nodes ?? []).filter(isOpen),
+    rows: present(data.search?.nodes ?? []).filter(keep),
     viewer: data.viewer?.login ?? '',
     rateLimit: data.rateLimit,
   }
@@ -138,6 +150,7 @@ const COLUMN_TITLES: Record<ColumnId, string> = {
   myPullRequests: 'My pull requests',
   reviewRequests: 'Waiting on my review',
   approvedPrs: 'Approved, awaiting merge',
+  recentlyMerged: 'Merged recently',
   myIssues: 'Issues I opened',
   assignedIssues: 'Issues assigned to me',
 }
@@ -155,18 +168,35 @@ export async function fetchDashboard(
   const issueSearch = (search: string) => () =>
     fetchSearch<RawIssue>(ISSUE_SEARCH_QUERY, search, limit)
 
-  const [myPullRequests, reviewRequests, approvedPrs, myIssues, assignedIssues] =
+  const mergedSince = new Date(Date.now() - MERGED_LOOKBACK_DAYS * DAY_MS)
+
+  const [myPullRequests, reviewRequests, approvedPrs, recentlyMerged, myIssues, assignedIssues] =
     await Promise.all([
       settle('myPullRequests', prSearch(SEARCH_QUERIES.myPullRequests)),
       settle('reviewRequests', prSearch(SEARCH_QUERIES.reviewRequests)),
       settle('approvedPrs', () =>
         fetchSearch<RawPr>(APPROVED_PR_SEARCH_QUERY, SEARCH_QUERIES.approvedPrs, limit),
       ),
+      settle('recentlyMerged', () =>
+        fetchSearch<RawMergedPr>(
+          MERGED_PR_SEARCH_QUERY,
+          SEARCH_QUERIES.recentlyMerged(mergedSince.toISOString().slice(0, 10)),
+          limit,
+          (node) => node.state === 'MERGED',
+        ),
+      ),
       settle('myIssues', issueSearch(SEARCH_QUERIES.myIssues)),
       settle('assignedIssues', issueSearch(SEARCH_QUERIES.myIssuesAssigned)),
     ])
 
-  const results = [myPullRequests, reviewRequests, approvedPrs, myIssues, assignedIssues]
+  const results = [
+    myPullRequests,
+    reviewRequests,
+    approvedPrs,
+    recentlyMerged,
+    myIssues,
+    assignedIssues,
+  ]
   const failed = results.filter((r) => r.error !== null)
   if (failed.length === results.length) {
     // Nothing got through: this is not one slow column, it is GitHub or the
@@ -195,10 +225,23 @@ export async function fetchDashboard(
     viewerApproved(raw, viewer),
   )
 
+  // `involves:` over-fetches; keep what is yours, inside the exact window.
+  const merged = recentlyMerged.value
+    ? recentlyMerged.value.rows
+        .filter(
+          (raw) =>
+            (raw.author?.login === viewer || raw.mergedBy?.login === viewer) &&
+            raw.mergedAt !== null &&
+            new Date(raw.mergedAt) >= mergedSince,
+        )
+        .map(normalizeMergedPr)
+    : previous.columns.recentlyMerged
+
   const columns = {
     myPullRequests: mine.rows,
     reviewRequests: requested.rows,
     approvedPrs: approved.rows,
+    recentlyMerged: [...merged].sort(byMergedDesc),
     myIssues: myIssues.value
       ? myIssues.value.rows.map(normalizeIssue).sort(byUpdatedDesc)
       : previous.columns.myIssues,
@@ -272,6 +315,7 @@ const EMPTY: DashboardData = {
     myPullRequests: [],
     reviewRequests: [],
     approvedPrs: [],
+    recentlyMerged: [],
     myIssues: [],
     assignedIssues: [],
   },

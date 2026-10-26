@@ -86,6 +86,10 @@ export interface PullRequestItem {
   changedFiles: number
   additions: number
   deletions: number
+  /** Set only on a merged PR, which only the recentlyMerged column carries. */
+  mergedAt: string | null
+  /** Who pressed the button; null while open, or for a deleted account. */
+  mergedBy: string | null
   /** True when the viewer can merge it right now, per GitHub. */
   canMerge: boolean
   /**
@@ -216,12 +220,17 @@ export interface DashboardData {
     reviewRequests: PullRequestItem[]
     /** Someone else's open PRs that the viewer has approved and not seen merge. */
     approvedPrs: PullRequestItem[]
+    /** PRs the viewer authored or merged, merged within MERGED_LOOKBACK_DAYS. */
+    recentlyMerged: PullRequestItem[]
     myIssues: IssueItem[]
     assignedIssues: IssueItem[]
   }
 }
 
 export type ColumnId = keyof DashboardData['columns']
+
+/** How far back the recentlyMerged column reaches. */
+export const MERGED_LOOKBACK_DAYS = 5
 
 // ---------------------------------------------------------------------------
 // Preflight / health

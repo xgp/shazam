@@ -5,6 +5,7 @@ import {
   CircleX,
   Clock,
   FileText,
+  GitMerge,
   MessageCircle,
   UserCheck,
   UserPen,
@@ -15,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import type { CheckState, MergeableState, ReviewDecision } from '../../shared/types.js'
+import { absoluteTime, relativeTime } from '../lib/format.js'
 import { type ChipColor, CHIP_SOFT } from './chips.js'
 import { CommentsPopover } from './CommentsPopover.js'
 
@@ -101,6 +103,18 @@ export function ReviewChip({ decision }: { decision: ReviewDecision }) {
     default:
       return null
   }
+}
+
+export function MergedChip({ mergedAt, mergedBy }: { mergedAt: string | null; mergedBy: string | null }) {
+  if (!mergedAt) return null
+  return (
+    <Chip
+      tooltip={`Merged ${absoluteTime(mergedAt)}${mergedBy ? ` by ${mergedBy}` : ''}`}
+      color="violet"
+      icon={<GitMerge />}
+      label={relativeTime(mergedAt)}
+    />
+  )
 }
 
 export function ConflictChip({ state, prUrl }: { state: MergeableState; prUrl?: string }) {

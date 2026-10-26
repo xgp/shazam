@@ -124,8 +124,9 @@ function termMatches(item: DashboardItem, term: FilterTerm): boolean {
       if (value === 'pr') return item.kind === 'pull_request'
       if (value === 'issue') return item.kind === 'issue'
       if (value === 'draft') return pr !== null && pr.isDraft
-      // Everything on the board is open; accepted so a pasted GitHub query works.
-      if (value === 'open') return true
+      if (value === 'merged') return pr !== null && pr.mergedAt !== null
+      // Everything else on the board is open; accepted so a pasted GitHub query works.
+      if (value === 'open') return pr === null || pr.mergedAt === null
       return false
     case 'checks':
       return pr !== null && pr.checks === CHECK_VALUES[value]

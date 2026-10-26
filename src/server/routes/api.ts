@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { HealthReport } from '../../shared/types.js'
 import { approvePullRequest } from '../actions/approve.js'
 import { closeIssue } from '../actions/close.js'
+import { addComment } from '../actions/comment.js'
 import { mergePullRequest } from '../actions/merge.js'
 import { editReviewers } from '../actions/reviewers.js'
 import type { SessionManager } from '../agent/sessions.js'
@@ -49,6 +50,11 @@ const approveSchema = z.object({
 const commentsSchema = z.object({
   repo: z.string().regex(/^[^/\s]+\/[^/\s]+$/, 'Expected owner/name'),
   number: z.coerce.number().int().positive(),
+})
+
+const commentSchema = z.object({
+  url: z.string().url(),
+  body: z.string().trim().min(1).max(4000),
 })
 
 const closeIssueSchema = z.object({
@@ -142,6 +148,16 @@ export function registerApiRoutes(app: FastifyInstance, deps: ApiDeps): void {
     if (!parsed.success) return reply.code(400).send({ ok: false, message: 'Invalid request' })
 
     const result = await approvePullRequest(parsed.data.url, parsed.data.body)
+    if (result.ok) void poller.refresh()
+    return result
+  })
+
+  app.post('/api/pr/comment', async (request, reply) => {
+    const parsed = commentSchema.safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send({ ok: false, message: 'Invalid request' })
+
+    const result = await addComment(parsed.data.url, parsed.data.body)
+    // The card's comment count moves; show it without waiting for the poll.
     if (result.ok) void poller.refresh()
     return result
   })

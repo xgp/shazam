@@ -1,4 +1,15 @@
-import { Bell, BellOff, Moon, RefreshCw, Rows3, Rows4, Sun, TriangleAlert } from 'lucide-react'
+import {
+  Bell,
+  BellOff,
+  Columns3,
+  Monitor,
+  Moon,
+  RefreshCw,
+  Rows3,
+  Rows4,
+  Sun,
+  TriangleAlert,
+} from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -23,6 +34,7 @@ import { COLUMNS } from './components/columns/index.js'
 import type { ColumnContext } from './components/registry.js'
 import { ownerOf } from './components/registry.js'
 import { useBoardKeys } from './hooks/useBoardKeys.js'
+import { useColumnOrder } from './hooks/useColumnOrder.js'
 import { useDashboard } from './hooks/useDashboard.js'
 import { useHealth } from './hooks/useHealth.js'
 import { activeViewQuery, useSavedViews } from './hooks/useSavedViews.js'
@@ -88,7 +100,7 @@ function initialQuery(): string {
 }
 
 export function App() {
-  const [appearance, toggleAppearance] = useAppearance()
+  const { appearance, preference: themePreference, cycle: cycleTheme } = useAppearance()
   const [density, toggleDensity] = useDensity()
   const health = useHealth()
   const dashboard = useDashboard(health?.pollIntervalMs ?? 60_000)
@@ -96,6 +108,8 @@ export function App() {
   const [owners, setOwners] = useState<Set<string>>(loadFilter)
   const [query, setQuery] = useState<string>(initialQuery)
   const savedViews = useSavedViews()
+  const columnOrder = useColumnOrder()
+  const orderedColumns = columnOrder.columns
   // Which tile you last touched, so you can find your place after coming back
   // from GitHub or an agent session. Deliberately not persisted: it is a marker
   // for the current sitting, not a saved selection.
@@ -291,8 +305,15 @@ export function App() {
   const visibleByColumn = useMemo(() => {
     const map = new Map<ColumnId, DashboardItem[]>()
     if (!data) return map
-    for (const column of COLUMNS) {
-      const visible = column.select(data).filter((item) => !dismissed.has(item.id))
+    for (const column of orderedColumns) {
+      // A merged row is exactly where a just-merged PR belongs, so the
+      // dismissal that hides it from the open columns must not hide it here.
+      const visible = column
+        .select(data)
+        .filter(
+          (item) =>
+            !dismissed.has(item.id) || (item.kind === 'pull_request' && item.mergedAt !== null),
+        )
       const byOwner =
         owners.size === 0 ? visible : visible.filter((item) => owners.has(ownerOf(item)))
       map.set(
@@ -301,21 +322,21 @@ export function App() {
       )
     }
     return map
-  }, [data, dismissed, owners, parsedQuery])
+  }, [data, dismissed, owners, parsedQuery, orderedColumns])
 
   // The keyboard cursor's view of the board, in render order: j/k flatten it
   // into reading order, the arrows keep the column structure. Collapsed
   // columns render no cards, so the cursor skips them entirely.
   const cursorColumns = useMemo(
     () =>
-      COLUMNS.filter((column) => !collapsedColumns.has(column.id)).map((column) => ({
+      orderedColumns.filter((column) => !collapsedColumns.has(column.id)).map((column) => ({
         columnId: column.id,
         items: (visibleByColumn.get(column.id) ?? []).map((item) => ({
           id: item.id,
           url: item.url,
         })),
       })),
-    [visibleByColumn, collapsedColumns],
+    [visibleByColumn, collapsedColumns, orderedColumns],
   )
 
   useBoardKeys(cursorColumns, lastClickedId, setLastClickedId)
@@ -399,6 +420,24 @@ export function App() {
               </TooltipContent>
             </Tooltip>
 
+            {/* Only once there is something to undo: a reset that does
+                nothing is one more icon to wonder about. */}
+            {columnOrder.isCustom ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground"
+                    onClick={columnOrder.reset}
+                  >
+                    <Columns3 />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Reset column order</TooltipContent>
+              </Tooltip>
+            ) : null}
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -423,13 +462,25 @@ export function App() {
                   variant="ghost"
                   size="icon-sm"
                   className="text-muted-foreground"
-                  onClick={toggleAppearance}
+                  onClick={cycleTheme}
                 >
-                  {appearance === 'dark' ? <Sun /> : <Moon />}
+                  {/* Three states, so unlike density this shows where you
+                      are: a destination icon cannot say "following the OS". */}
+                  {themePreference === 'system' ? (
+                    <Monitor />
+                  ) : themePreference === 'dark' ? (
+                    <Moon />
+                  ) : (
+                    <Sun />
+                  )}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {appearance === 'dark' ? 'Switch to light' : 'Switch to dark'}
+                {themePreference === 'system'
+                  ? `Theme follows the OS (${appearance} now) - click for light`
+                  : themePreference === 'light'
+                    ? 'Theme: light - click for dark'
+                    : 'Theme: dark - click to follow the OS'}
               </TooltipContent>
             </Tooltip>
           </div>
@@ -490,7 +541,7 @@ export function App() {
             className="group/density flex min-h-0 flex-1 items-stretch gap-3 overflow-x-auto px-4 py-3"
             data-density={density}
           >
-            {COLUMNS.map((column) => {
+            {orderedColumns.map((column) => {
               const all = data ? column.select(data) : []
               const items = visibleByColumn.get(column.id) ?? []
               return (
@@ -506,6 +557,8 @@ export function App() {
                   ctx={ctx}
                   collapsed={collapsedColumns.has(column.id)}
                   onToggleCollapse={() => toggleCollapsed(column.id)}
+                  onReorder={columnOrder.move}
+                  onNudge={(step) => columnOrder.nudge(column.id, step)}
                 />
               )
             })}

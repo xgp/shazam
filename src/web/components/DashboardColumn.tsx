@@ -1,4 +1,5 @@
-import { ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { ChevronsLeft, ChevronsRight, GripVertical } from 'lucide-react'
+import { type DragEvent, type KeyboardEvent, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -17,6 +18,67 @@ export interface DashboardColumnProps {
   ctx: ColumnContext
   collapsed: boolean
   onToggleCollapse: () => void
+  /** Drop `fromId` into this column's slot. */
+  onReorder: (fromId: string, toId: string) => void
+  /** One slot left or right, for the grip's arrow keys. */
+  onNudge: (step: -1 | 1) => void
+}
+
+/** Private to the board, so a dragged card or file never reads as a column. */
+const DRAG_TYPE = 'application/x-shazam-column'
+
+const isColumnDrag = (event: DragEvent) => event.dataTransfer.types.includes(DRAG_TYPE)
+
+/**
+ * Native drag and drop, no library: the header (or the collapsed rail) is the
+ * handle, the whole column is the target. Enter/leave fire for every child the
+ * pointer crosses, so a depth counter decides when the pointer has really left.
+ */
+function useColumnDrag(columnId: string, onReorder: DashboardColumnProps['onReorder']) {
+  const [over, setOver] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const depth = useRef(0)
+
+  const source = {
+    draggable: true,
+    onDragStart: (event: DragEvent) => {
+      event.dataTransfer.setData(DRAG_TYPE, columnId)
+      event.dataTransfer.effectAllowed = 'move'
+      setDragging(true)
+    },
+    onDragEnd: () => setDragging(false),
+  }
+
+  const target = {
+    onDragEnter: (event: DragEvent) => {
+      if (!isColumnDrag(event)) return
+      event.preventDefault()
+      depth.current += 1
+      setOver(true)
+    },
+    onDragOver: (event: DragEvent) => {
+      if (!isColumnDrag(event)) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'move'
+    },
+    onDragLeave: (event: DragEvent) => {
+      if (!isColumnDrag(event)) return
+      depth.current = Math.max(0, depth.current - 1)
+      if (depth.current === 0) setOver(false)
+    },
+    onDrop: (event: DragEvent) => {
+      depth.current = 0
+      setOver(false)
+      const fromId = event.dataTransfer.getData(DRAG_TYPE)
+      if (!fromId) return
+      event.preventDefault()
+      onReorder(fromId, columnId)
+    },
+  }
+
+  const highlight = cn(over && !dragging && 'ring-2 ring-primary/60', dragging && 'opacity-50')
+
+  return { source, target, highlight }
 }
 
 /*
@@ -45,7 +107,20 @@ export function DashboardColumn({
   ctx,
   collapsed,
   onToggleCollapse,
+  onReorder,
+  onNudge,
 }: DashboardColumnProps) {
+  const drag = useColumnDrag(column.id, onReorder)
+
+  // Arrow keys on the grip move the column; stopping them here keeps the
+  // board's own arrow-key cursor (a window listener) from moving as well.
+  const onGripKey = (event: KeyboardEvent) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    event.preventDefault()
+    event.stopPropagation()
+    onNudge(event.key === 'ArrowLeft' ? -1 : 1)
+  }
+
   if (collapsed) {
     return (
       // A collapsed column keeps its slot in the flex row - same stretch, just
@@ -55,8 +130,13 @@ export function DashboardColumn({
       <button
         type="button"
         onClick={onToggleCollapse}
-        title={`Expand ${column.title}`}
-        className="flex min-h-0 w-10 shrink-0 flex-col items-center gap-2 rounded-lg border bg-card py-2 transition-colors hover:bg-accent"
+        title={`Expand ${column.title} - drag to reorder`}
+        {...drag.source}
+        {...drag.target}
+        className={cn(
+          'flex min-h-0 w-10 shrink-0 flex-col items-center gap-2 rounded-lg border bg-card py-2 transition-colors hover:bg-accent',
+          drag.highlight,
+        )}
       >
         <ChevronsRight className="size-4 shrink-0 text-muted-foreground" />
         {column.dot ? <span className={cn('size-2 shrink-0 rounded-full', column.dot)} /> : null}
@@ -76,12 +156,29 @@ export function DashboardColumn({
   return (
     // Fixed width rather than an equal share of the window: card content is
     // designed around this measure, and the row scrolls when it runs out.
-    <div className="flex min-h-0 w-95 shrink-0 flex-col gap-2">
+    <div
+      {...drag.target}
+      className={cn('flex min-h-0 w-95 shrink-0 flex-col gap-2 rounded-lg', drag.highlight)}
+    >
       {/* pr-4 matches the card gutter below, so the count badge lines up with
-          the cards' right edge instead of overhanging it. */}
-      <div className="flex items-start justify-between gap-2 pl-1 pr-4">
+          the cards' right edge instead of overhanging it. The header is the
+          drag handle, so selecting card text never starts a column drag. */}
+      <div {...drag.source} className="group/header flex items-start justify-between gap-2 pl-1 pr-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={`Move ${column.title} (left and right arrow keys)`}
+                  onKeyDown={onGripKey}
+                  className="-ml-1 cursor-grab rounded text-muted-foreground/40 transition-colors group-hover/header:text-muted-foreground focus-visible:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring active:cursor-grabbing"
+                >
+                  <GripVertical className="size-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Drag to reorder (or focus and use ← →)</TooltipContent>
+            </Tooltip>
             {column.dot ? (
               <span className={cn('size-2 shrink-0 rounded-full', column.dot)} />
             ) : null}

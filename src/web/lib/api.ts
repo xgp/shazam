@@ -72,6 +72,7 @@ export const api = {
   merge: (url: string, method: MergeMethod, body?: string) =>
     post<ActionResult>('/api/pr/merge', { url, method, body }),
   approve: (url: string, body?: string) => post<ActionResult>('/api/pr/approve', { url, body }),
+  comment: (url: string, body: string) => post<ActionResult>('/api/pr/comment', { url, body }),
   closeIssue: (url: string, comment?: string) =>
     post<ActionResult>('/api/issue/close', { url, comment }),
   sessions: () => request<AgentSession[]>('/api/sessions'),

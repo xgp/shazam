@@ -30,6 +30,10 @@ const PR_FRAGMENT = /* GraphQL */ `
     state
     updatedAt
     createdAt
+    mergedAt
+    mergedBy {
+      login
+    }
     isDraft
     author {
       login
@@ -159,6 +163,64 @@ export const APPROVED_PR_SEARCH_QUERY = /* GraphQL */ `
   }
 `
 
+/**
+ * The merged column's own, leaner shape. Over the same hundred rows, PrFields
+ * ran 11s - past GitHub's ceiling, so the column came back as a 502 - and
+ * most of that was fields a merged PR has nothing to say with: mergeability,
+ * review decision, review threads and repository merge settings each cost a
+ * second or two. normalizeMergedPr fills them with neutral values.
+ */
+export const MERGED_PR_SEARCH_QUERY = /* GraphQL */ `
+  ${REPO_FRAGMENT}
+  query MergedPrSearch($search: String!, $limit: Int!) {
+    ${CONTEXT_FIELDS}
+    search(query: $search, type: ISSUE, first: $limit) {
+      nodes {
+        ... on PullRequest {
+          id
+          number
+          title
+          url
+          state
+          updatedAt
+          createdAt
+          mergedAt
+          mergedBy {
+            login
+          }
+          isDraft
+          author {
+            login
+          }
+          repository {
+            ...RepoFields
+          }
+          headRepository {
+            ...RepoFields
+          }
+          headRefName
+          baseRefName
+          changedFiles
+          additions
+          deletions
+          comments {
+            totalCount
+          }
+          commits(last: 1) {
+            nodes {
+              commit {
+                statusCheckRollup {
+                  state
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`
+
 export const ISSUE_SEARCH_QUERY = /* GraphQL */ `
   ${REPO_FRAGMENT}
   ${ISSUE_FRAGMENT}
@@ -189,6 +251,15 @@ export const SEARCH_QUERIES = {
    */
   approvedPrs:
     'is:open is:pr reviewed-by:@me -author:@me -review-requested:@me archived:false sort:updated-desc',
+  /**
+   * Search has no `merged-by:` qualifier, so `involves:@me` casts the net -
+   * author, reviewer, commenter, assignee - and the poller keeps the rows you
+   * authored or merged yourself. A PR you merged without ever touching it
+   * otherwise (a bot's, say) falls outside the net. The date is day-granular;
+   * the poller trims to the exact window.
+   */
+  recentlyMerged: (since: string) =>
+    `is:pr is:merged involves:@me merged:>=${since} archived:false sort:updated-desc`,
   myIssues: 'is:open is:issue author:@me archived:false sort:updated-desc',
   /**
    * `-author:@me` keeps the two issue columns disjoint, the same way

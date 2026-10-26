@@ -1,11 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="shazam">
-  <!-- Blue tile in the theme's primary token, oklch(0.6231 0.188 259.8145),
-       with the same lucide "zap" bolt the Shazam button and session badges
-       use. Hard-coded hex: an icon has no stylesheet to read a variable from. -->
-  <rect width="64" height="64" rx="14" fill="#3b82f6" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="shazam">
+  <!-- Phase Two logo tile (Desktop/logos/phasetwo_logo_icon.svg) with the
+       lucide "zap" bolt the Shazam button and session badges use, badged
+       bottom-right. Hard-coded hex: an icon has no stylesheet to read from. -->
+  <rect width="192" height="192" rx="4" fill="#3FA1E3" />
+  <g fill="#ffffff">
+    <path d="M95.2097 33H124.902L55.7661 153.692C53.9329 156.897 49.8486 159.517 46.6951 159.517H17L86.1356 38.8253C87.972 35.6201 92.0531 33 95.2097 33Z" />
+    <path d="M146.162 33H175.857L106.721 153.692C104.885 156.897 100.804 159.517 97.6471 159.517H67.9519L137.088 38.8253C138.924 35.6201 143.005 33 146.162 33Z" />
+  </g>
+  <!-- Badge: a tile-colored ring cuts it out from the slashes behind it;
+       the clip keeps that ring inside the tile's rounded corner. -->
+  <clipPath id="tile"><rect width="192" height="192" rx="4" /></clipPath>
+  <g clip-path="url(#tile)">
+    <circle cx="132" cy="132" r="64" fill="#3FA1E3" />
+    <circle cx="132" cy="132" r="56" fill="#FACC15" />
+  </g>
   <path
-    transform="translate(32 32) scale(2.05) translate(-12.47 -12)"
-    fill="#ffffff"
+    transform="translate(132 132) scale(4) translate(-12.47 -12)"
+    fill="#1E293B"
     d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"
   />
 </svg>
