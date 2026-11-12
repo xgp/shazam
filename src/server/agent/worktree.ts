@@ -142,6 +142,15 @@ async function pullRequestWorktree(
     return { path, branch, gitRoot: mirror, reused: true }
   }
 
+  // A PR opened from an issue session is on that session's `issue-<n>` branch,
+  // and git refuses to check one branch out twice. That worktree is the PR's
+  // working copy already - possibly with work not yet pushed - so use it.
+  const existing = await worktreeForBranch(mirror, branch)
+  if (existing) {
+    onLog(`Branch ${branch} is already checked out at ${existing}; reusing it`)
+    return { path: existing, branch, gitRoot: mirror, reused: true }
+  }
+
   const prRef = await fetchPrHead(mirror, req.prNumber, onLog)
 
   onLog(`Creating worktree at ${path} on ${branch}`)
@@ -166,10 +175,28 @@ async function issueWorktree(
     return { path, branch, gitRoot: mirror, reused: true }
   }
 
-  const base = await defaultBranch(mirror)
-  onLog(`Creating worktree at ${path} on ${branch}, off ${base}`)
+  // e.g. a PR was opened from this branch and its session made the worktree.
+  const existing = await worktreeForBranch(mirror, branch)
+  if (existing) {
+    onLog(`Branch ${branch} is already checked out at ${existing}; reusing it`)
+    return { path: existing, branch, gitRoot: mirror, reused: true }
+  }
+
   await mkdir(dirname(path), { recursive: true })
-  await git(mirror, ['worktree', 'add', '-B', branch, path, `refs/remotes/origin/${base}`])
+
+  // Never `-B` here: the branch may outlive its worktree directory, carrying
+  // commits that exist nowhere else, and resetting it would discard them.
+  if (await refExists(mirror, `refs/heads/${branch}`)) {
+    onLog(`Creating worktree at ${path} on existing branch ${branch}`)
+    await git(mirror, ['worktree', 'add', path, branch])
+  } else if (await refExists(mirror, `refs/remotes/origin/${branch}`)) {
+    onLog(`Creating worktree at ${path} on ${branch}, from origin/${branch}`)
+    await git(mirror, ['worktree', 'add', '-b', branch, path, `refs/remotes/origin/${branch}`])
+  } else {
+    const base = await defaultBranch(mirror)
+    onLog(`Creating worktree at ${path} on ${branch}, off ${base}`)
+    await git(mirror, ['worktree', 'add', '-b', branch, path, `refs/remotes/origin/${base}`])
+  }
 
   // No upstream exists yet - this is a branch nobody has pushed. Naming the
   // remote ref it will become is what lets the agent's plain `git push` create
@@ -178,6 +205,28 @@ async function issueWorktree(
   await git(path, ['config', `branch.${branch}.merge`, `refs/heads/${branch}`])
 
   return { path, branch, gitRoot: mirror, reused: false }
+}
+
+async function refExists(mirror: string, ref: string): Promise<boolean> {
+  try {
+    await git(mirror, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`])
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** The live worktree that has `branch` checked out, if any. */
+async function worktreeForBranch(mirror: string, branch: string): Promise<string | null> {
+  const { stdout } = await git(mirror, ['worktree', 'list', '--porcelain'])
+  // Porcelain output is blank-line-separated records of "key value" lines.
+  for (const record of stdout.split(/\n\s*\n/)) {
+    const lines = record.split('\n')
+    const path = lines.find((l) => l.startsWith('worktree '))?.slice('worktree '.length)
+    const ref = lines.find((l) => l.startsWith('branch '))?.slice('branch '.length)
+    if (path && ref === `refs/heads/${branch}` && existsSync(join(path, '.git'))) return path
+  }
+  return null
 }
 
 /** Wire up tracking so a plain `git push` in the worktree updates the PR. */
