@@ -255,6 +255,44 @@ The primary half opens `defaultAgent`; the caret picks the other one. Agents
 that were not found on `PATH` at startup are disabled rather than hidden, and
 `defaultAgent` falls back to whichever one is installed.
 
+## On a phone
+
+Below 768px wide, shazam swaps the board for a phone layout. It switches on
+width, not on the browser, so a desktop window dragged narrow gets it too, and a
+tablet or a phone in landscape wide enough for the board keeps the board.
+
+- **One column per screen.** Swipe between columns, or tap one in the tab strip
+  above them, which shows each column's count. The owner chips and saved views
+  fold away behind the filter button next to the search box.
+- **The menu** (⋮) holds alerts, density and theme, when the board was last
+  refreshed and how much of the GitHub API quota is left, and **Reorder
+  columns**. Dragging columns is a desktop gesture, so on a phone the order is
+  edited as a list. It is the same order the desktop board uses.
+- **Tap a chip** to see what it means. On a desktop that explanation is a hover
+  tooltip, and a touch screen never hovers.
+- **Sessions** sit in a bar along the bottom that names the one waiting for you.
+  Tapping it opens the terminal full screen: one pane at a time, with the
+  agent and its companion shell as a toggle rather than a split. A row of keys
+  covers what a phone keyboard lacks: ctrl (applies to the next key you type),
+  esc, tab, shift-tab, ^C, the arrows and enter. The keyboard button opens a
+  compose box for text you would rather type with autocorrect, dictation or
+  paste; it sends the text, then Enter. The menu on the session's title
+  switches sessions, shows the session's card on the board, closes the shell,
+  and ends the session. Your phone's back gesture returns to the board.
+
+**Getting it onto the phone.** The server has to be reachable from the phone
+first; see *Access control* under [How it works](#how-it-works). Then open
+shazam on the desktop at that same address and click the phone icon in the
+header. It shows a QR code of the address with your token on it, so scanning
+it signs the phone in. Treat the code like the token itself. From the phone
+browser's menu, **Add to Home Screen** installs shazam as an app that opens
+without the browser's toolbars. On iOS the installed app keeps its own storage,
+so it asks for the token once; paste it from the desktop's `~/.shazam/token`.
+
+**One terminal, two screens.** A phone and a desktop can show the same session,
+but a terminal has a single size. Whichever screen you last typed into, or
+tapped into, sets it, and the other rewraps until you use it again.
+
 ### Workspace trust
 
 Both agents ask whether you trust a directory the first time they open one.
@@ -343,6 +381,16 @@ Adding, removing or reordering a list is an edit to the `COLUMNS` array in
 `src/web/components/columns/index.ts`. Agents are similarly behind an
 `AgentAdapter` (`src/server/agent/adapter.ts`) — adding one is a new adapter plus
 a preflight entry.
+
+## Tests
+
+`npm run test:e2e` runs the Playwright layout checks in `e2e/` at phone,
+phone-landscape, narrow-window and desktop sizes. The server is stubbed with
+fixtures, so they need no GitHub token or agent; Playwright starts the Vite dev
+server on port 4381 (`E2E_PORT` to change it). They assert that nothing scrolls
+sideways and that the phone layout's tabs, filters, menu, terminal key bar,
+compose box and back gesture behave. `@playwright/test` is pinned to an exact
+version because each version expects one specific browser build.
 
 ## Known gaps
 

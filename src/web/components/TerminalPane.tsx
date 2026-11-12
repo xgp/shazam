@@ -29,6 +29,12 @@ export interface TerminalPaneProps {
   width?: number
   fontSize: number
   onStatus: (session: AgentSession) => void
+  /** Hands out a way to type into the pty, for the mobile key bar. */
+  onSender?: (send: ((data: string) => void) | null) => void
+  /** False on touch screens: focusing pops the soft keyboard over everything. */
+  autoFocus?: boolean
+  /** Rewrites typed input before it is sent - the mobile key bar's sticky Ctrl. */
+  transformInput?: (data: string) => string
 }
 
 export function TerminalPane({
@@ -38,12 +44,17 @@ export function TerminalPane({
   width,
   fontSize,
   onStatus,
+  onSender,
+  autoFocus = true,
+  transformInput,
 }: TerminalPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const syncRef = useRef<() => void>(() => {})
   const statusRef = useRef(onStatus)
   statusRef.current = onStatus
+  const transformRef = useRef(transformInput)
+  transformRef.current = transformInput
 
   // Re-run only on session change: the socket and terminal outlive theme flips
   // and resizes.
@@ -64,7 +75,7 @@ export function TerminalPane({
     term.open(host)
     termRef.current = term
     // Clicking Shazam should leave you able to type at the agent immediately.
-    term.focus()
+    if (autoFocus) term.focus()
 
     const socket = new WebSocket(ptyUrl(session.id))
     const send = (payload: unknown) => {
@@ -100,7 +111,16 @@ export function TerminalPane({
     }
     socket.onclose = () => term.write('\r\n\x1b[2m[disconnected]\x1b[0m\r\n')
 
-    term.onData((data) => send({ type: 'input', data }))
+    term.onData((data) => {
+      const transform = transformRef.current
+      send({ type: 'input', data: transform ? transform(data) : data })
+    })
+    // Another screen may have resized the shared pty since; focusing here says
+    // this is the screen in use, so it takes the size back before you type.
+    term.textarea?.addEventListener('focus', sync)
+    // No focus() here: the key bar may be used with the compose box focused,
+    // and moving focus would swap the soft keyboard out from under it.
+    onSender?.((data) => send({ type: 'input', data }))
 
     const observer = new ResizeObserver(schedule)
     observer.observe(host)
@@ -120,6 +140,7 @@ export function TerminalPane({
       window.removeEventListener('resize', schedule)
       document.removeEventListener('visibilitychange', onVisible)
       syncRef.current = () => {}
+      onSender?.(null)
       socket.close()
       term.dispose()
       termRef.current = null

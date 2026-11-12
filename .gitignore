@@ -6,3 +6,7 @@ dist/
 # Per-machine Claude Code permissions. Ignored globally on the author's box,
 # which does nothing for anyone who clones this - so name it here too.
 .claude/settings.local.json
+
+# Playwright output
+test-results/
+playwright-report/

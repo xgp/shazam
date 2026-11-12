@@ -15,16 +15,66 @@ function TooltipProvider({
   )
 }
 
+/**
+ * Radix tooltips open on hover and focus only, so on a touch screen a status
+ * chip whose meaning lives in its tooltip says nothing at all. A tap on a
+ * trigger that does nothing else (a chip, not a button or link) toggles it.
+ */
+const TapToggle = React.createContext<(() => void) | null>(null)
+
 function Tooltip({
+  open,
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+  const [tapped, setTapped] = React.useState(false)
+  const toggle = React.useCallback(() => setTapped((current) => !current), [])
+  return (
+    <TapToggle.Provider value={toggle}>
+      <TooltipPrimitive.Root
+        data-slot="tooltip"
+        // Left uncontrolled (undefined) unless a tap opened it, so hover keeps
+        // working exactly as before on a desktop.
+        open={open ?? (tapped || undefined)}
+        onOpenChange={(next) => {
+          if (!next) setTapped(false)
+          onOpenChange?.(next)
+        }}
+        {...props}
+      />
+    </TapToggle.Provider>
+  )
 }
 
 function TooltipTrigger({
+  onPointerDown,
+  onClick,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
+  const toggle = React.useContext(TapToggle)
+  const touch = React.useRef(false)
+  return (
+    <TooltipPrimitive.Trigger
+      data-slot="tooltip-trigger"
+      onPointerDown={(event) => {
+        touch.current = event.pointerType === "touch"
+        onPointerDown?.(event)
+      }}
+      onClick={(event) => {
+        onClick?.(event)
+        const target = event.currentTarget as HTMLElement
+        if (!touch.current || !toggle || target.closest("button, a, input, [role=button]")) return
+        // preventDefault also stops Radix's own click handler, which would
+        // close the tooltip straight after this opens it.
+        event.preventDefault()
+        // And keep the tap from reaching a clickable card underneath, which
+        // would open GitHub instead of showing the explanation.
+        event.stopPropagation()
+        toggle()
+      }}
+      {...props}
+    />
+  )
 }
 
 function TooltipContent({
@@ -51,4 +101,4 @@ function TooltipContent({
   )
 }
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
+export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger }

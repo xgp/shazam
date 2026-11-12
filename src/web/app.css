@@ -3,6 +3,9 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* A phone held sideways: ~350px tall, so the phone layout drops a row or two. */
+@custom-variant short (@media (max-height: 500px));
+
 /*
  * The palette tracks the Phase Two dashboard theme: blue primary, cool
  * gray-blue neutrals, and the same success/warning greens and ambers, so the
@@ -109,6 +112,29 @@
   #root {
     height: 100%;
     margin: 0;
+  }
+}
+
+/* --- touch screens ------------------------------------------------------ */
+
+/*
+ * Sized for a fingertip rather than a cursor. The board's xs buttons are 24px,
+ * about half what a thumb can hit reliably, so on a coarse pointer they grow
+ * to 36px. Inputs go to 16px because iOS zooms the whole page into any field
+ * with smaller text, and never zooms back out.
+ */
+@media (pointer: coarse) {
+  [data-slot='button'][data-size='xs'] {
+    min-height: 2.25rem;
+  }
+  [data-slot='button'][data-size='icon-xs'] {
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+  }
+  input,
+  textarea,
+  select {
+    font-size: 16px;
   }
 }
 

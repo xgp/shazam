@@ -381,6 +381,9 @@ export class SessionManager {
     // xterm reports 0 while its container is hidden; resizing to 0 kills layout.
     if (!entry || cols <= 0 || rows <= 0) return
 
+    // Called on every keystroke from the active client; only a real change
+    // is worth a SIGWINCH, which makes a TUI repaint the whole screen.
+    if (entry.size.cols === cols && entry.size.rows === rows) return
     entry.size = { cols, rows }
     // No process yet: the size is remembered and applied when it spawns.
     entry.pty?.resize(cols, rows)

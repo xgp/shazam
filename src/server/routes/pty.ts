@@ -18,6 +18,12 @@ export function registerPtyRoute(app: FastifyInstance, sessions: SessionManager)
       }
 
       const detach = sessions.attach(id, send)
+      /**
+       * This client's own geometry. A phone and a desktop can watch the same
+       * session, but a pty has one size: whoever is typing gets theirs, so the
+       * other screen rewraps only while it is not the one in use.
+       */
+      let size: { cols: number; rows: number } | null = null
 
       socket.on('message', (raw: Buffer) => {
         let message: PtyClientMessage
@@ -27,8 +33,13 @@ export function registerPtyRoute(app: FastifyInstance, sessions: SessionManager)
           return
         }
 
-        if (message.type === 'input') sessions.write(id, message.data)
-        else if (message.type === 'resize') sessions.resize(id, message.cols, message.rows)
+        if (message.type === 'input') {
+          if (size) sessions.resize(id, size.cols, size.rows)
+          sessions.write(id, message.data)
+        } else if (message.type === 'resize') {
+          size = { cols: message.cols, rows: message.rows }
+          sessions.resize(id, message.cols, message.rows)
+        }
       })
 
       // Detaching leaves the process running so the session survives a reload.

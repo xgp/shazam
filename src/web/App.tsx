@@ -26,6 +26,8 @@ import { DashboardColumn } from './components/DashboardColumn.js'
 import { FilterBar } from './components/FilterBar.js'
 import { FilterChips } from './components/FilterChips.js'
 import { KeyboardHelp } from './components/KeyboardHelp.js'
+import { MobileShell } from './components/mobile/MobileShell.js'
+import { PhoneLinkButton } from './components/PhoneLinkButton.js'
 import { TerminalDock } from './components/TerminalDock.js'
 import { Toaster } from './components/Toaster.js'
 import { TokenGate } from './components/TokenGate.js'
@@ -37,6 +39,7 @@ import { useBoardKeys } from './hooks/useBoardKeys.js'
 import { useColumnOrder } from './hooks/useColumnOrder.js'
 import { useDashboard } from './hooks/useDashboard.js'
 import { useHealth } from './hooks/useHealth.js'
+import { useIsMobile } from './hooks/useIsMobile.js'
 import { activeViewQuery, useSavedViews } from './hooks/useSavedViews.js'
 import { useSessions } from './hooks/useSessions.js'
 import { useAppearance } from './lib/appearance.js'
@@ -116,6 +119,11 @@ export function App() {
   const [lastClickedId, setLastClickedId] = useState<string | null>(null)
   // Lifted out of the dock so a badge on the board can expand it.
   const [dockCollapsed, setDockCollapsed] = useState(false)
+  // Below 768px the board is swapped for the phone layout. Width rather than
+  // user agent, so a narrowed desktop window gets it too.
+  const isMobile = useIsMobile()
+  // The phone layout's full-screen terminal; the desktop dock ignores it.
+  const [terminalOpen, setTerminalOpen] = useState(false)
   /**
    * Rows hidden because you just acted on them. A refresh is not enough on its
    * own: GitHub's search index lags, so an approved PR keeps matching
@@ -249,8 +257,9 @@ export function App() {
     (id: string) => {
       sessions.setActiveId(id)
       setDockCollapsed(false)
+      if (isMobile) setTerminalOpen(true)
     },
-    [sessions],
+    [sessions, isMobile],
   )
 
   const ctx: ColumnContext = useMemo(
@@ -261,7 +270,12 @@ export function App() {
       defaultAgent: health?.defaultAgent ?? 'claude',
       sessionsByItem,
       onRevealSession: revealSession,
-      onSessionLaunched: (session: AgentSession) => sessions.add(session),
+      onSessionLaunched: (session: AgentSession) => {
+        sessions.add(session)
+        // The desktop dock opens itself on a new session; on a phone the
+        // equivalent is going straight to its terminal.
+        if (isMobile) setTerminalOpen(true)
+      },
       onActioned: (itemId: string) => {
         setDismissed((current) => new Map(current).set(itemId, Date.now() + DISMISS_MS))
         void dashboard.refresh()
@@ -279,6 +293,7 @@ export function App() {
       revealSession,
       sessions,
       dashboard,
+      isMobile,
       lastClickedId,
     ],
   )
@@ -351,6 +366,99 @@ export function App() {
 
   const toolWarnings = (health?.tools ?? []).filter((tool) => tool.status !== 'ok')
 
+  // Built once and placed by whichever layout is showing, so the phone and
+  // the desktop cannot drift apart in what a view tab or a callout does.
+  const viewTabs = (
+    <ViewTabs
+      views={savedViews.views}
+      activeId={savedViews.activeId}
+      modified={viewModified}
+      onSelect={selectView}
+      onSave={(name) => savedViews.save(name, query, [...owners])}
+      onUpdate={() => {
+        if (activeView) savedViews.update(activeView.id, query, [...owners])
+      }}
+      onRename={savedViews.rename}
+      onDelete={savedViews.remove}
+    />
+  )
+  const callouts =
+    dashboard.error || data?.error || toolWarnings.length > 0 ? (
+      <>
+        {dashboard.error ? (
+          <Alert variant="destructive" className="border-destructive/50 px-3 py-2">
+            <TriangleAlert />
+            <AlertDescription>Cannot reach the shazam server: {dashboard.error}</AlertDescription>
+          </Alert>
+        ) : null}
+        {data?.error ? (
+          <Alert variant="destructive" className="border-destructive/50 px-3 py-2">
+            <TriangleAlert />
+            <AlertDescription>Last poll failed: {data.error}</AlertDescription>
+          </Alert>
+        ) : null}
+        {toolWarnings.map((tool) => (
+          <Alert key={tool.name} className="border-warning/50 px-3 py-2 text-amber-700 dark:text-warning">
+            <TriangleAlert />
+            <AlertDescription className="text-amber-700 dark:text-warning">
+              {tool.name}: {tool.detail ?? tool.status}
+            </AlertDescription>
+          </Alert>
+        ))}
+      </>
+    ) : null
+
+  if (isMobile) {
+    const alerts = callouts ? <div className="flex shrink-0 flex-col gap-1 px-3 pt-2">{callouts}</div> : null
+    return (
+      <TooltipProvider delayDuration={300}>
+        <Toaster>
+          <div className="group/density" data-density={density}>
+            <MobileShell
+              viewer={data?.viewer ?? ''}
+              columns={orderedColumns}
+              visibleByColumn={visibleByColumn}
+              loading={!data && !dashboard.error}
+              ctx={ctx}
+              query={query}
+              onQuery={setQuery}
+              owners={ownerCounts}
+              selectedOwners={owners}
+              onToggleOwner={toggleOwner}
+              onClearOwners={() => persistOwners(new Set())}
+              viewTabs={viewTabs}
+              alerts={alerts}
+              fetchedAt={data?.fetchedAt ?? null}
+              rateLimit={data?.rateLimit ?? null}
+              refreshing={dashboard.refreshing}
+              onRefresh={() => void dashboard.refresh()}
+              alertsOn={alertsOn}
+              onToggleAlerts={toggleAlerts}
+              themePreference={themePreference}
+              appearance={appearance}
+              onCycleTheme={cycleTheme}
+              density={density}
+              onToggleDensity={toggleDensity}
+              onNudgeColumn={columnOrder.nudge}
+              columnOrderCustom={columnOrder.isCustom}
+              onResetColumnOrder={columnOrder.reset}
+              sessions={sessions.sessions}
+              activeId={sessions.activeId}
+              onSelectSession={sessions.setActiveId}
+              onCloseSession={(id) => void sessions.close(id)}
+              onSessionStatus={(session) => sessions.update(session)}
+              onSessionsChanged={() => void sessions.reload()}
+              terminalOpen={terminalOpen}
+              onTerminalOpen={setTerminalOpen}
+              onShowItem={focusItem}
+            />
+          </div>
+          <BoardAlerts data={data} enabled={alertsOn} onFocusItem={focusItem} />
+        </Toaster>
+      </TooltipProvider>
+    )
+  }
+
   return (
     <TooltipProvider delayDuration={300}>
       <Toaster>
@@ -370,6 +478,8 @@ export function App() {
                 onClear={() => persistOwners(new Set())}
               />
             </div>
+
+            <PhoneLinkButton />
 
             <Tooltip>
               <TooltipTrigger asChild>
@@ -486,50 +596,11 @@ export function App() {
           </div>
 
           <div className="flex shrink-0 items-center gap-3 border-b px-4 py-2">
-            <ViewTabs
-              views={savedViews.views}
-              activeId={savedViews.activeId}
-              modified={viewModified}
-              onSelect={selectView}
-              onSave={(name) => savedViews.save(name, query, [...owners])}
-              onUpdate={() => {
-                if (activeView) savedViews.update(activeView.id, query, [...owners])
-              }}
-              onRename={savedViews.rename}
-              onDelete={savedViews.remove}
-            />
+            {viewTabs}
             <FilterBar value={query} onChange={setQuery} />
           </div>
 
-          {dashboard.error || data?.error || toolWarnings.length > 0 ? (
-            <div className="flex flex-col gap-1 px-4 pt-3">
-              {dashboard.error ? (
-                <Alert variant="destructive" className="border-destructive/50 px-3 py-2">
-                  <TriangleAlert />
-                  <AlertDescription>
-                    Cannot reach the shazam server: {dashboard.error}
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-              {data?.error ? (
-                <Alert variant="destructive" className="border-destructive/50 px-3 py-2">
-                  <TriangleAlert />
-                  <AlertDescription>Last poll failed: {data.error}</AlertDescription>
-                </Alert>
-              ) : null}
-              {toolWarnings.map((tool) => (
-                <Alert
-                  key={tool.name}
-                  className="border-warning/50 px-3 py-2 text-amber-700 dark:text-warning"
-                >
-                  <TriangleAlert />
-                  <AlertDescription className="text-amber-700 dark:text-warning">
-                    {tool.name}: {tool.detail ?? tool.status}
-                  </AlertDescription>
-                </Alert>
-              ))}
-            </div>
-          ) : null}
+          {callouts ? <div className="flex flex-col gap-1 px-4 pt-3">{callouts}</div> : null}
 
           {/* The row takes the space the dock leaves. Columns hold a fixed
               width, the row scrolls sideways when they overflow the window,
