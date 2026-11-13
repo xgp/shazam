@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import {
   Tooltip,
   TooltipContent,
@@ -28,7 +29,7 @@ import { FilterChips } from './components/FilterChips.js'
 import { KeyboardHelp } from './components/KeyboardHelp.js'
 import { MobileShell } from './components/mobile/MobileShell.js'
 import { PhoneLinkButton } from './components/PhoneLinkButton.js'
-import { TerminalDock } from './components/TerminalDock.js'
+import { type DockPosition, TerminalDock } from './components/TerminalDock.js'
 import { Toaster } from './components/Toaster.js'
 import { TokenGate } from './components/TokenGate.js'
 import { ViewTabs } from './components/ViewTabs.js'
@@ -46,10 +47,20 @@ import { useAppearance } from './lib/appearance.js'
 import { useDensity } from './lib/density.js'
 import { matchesFilter, parseFilter } from './lib/filter.js'
 import { relativeTime } from './lib/format.js'
+import { cycleOwner, ownerPasses } from './lib/owners.js'
 
 const FILTER_KEY = 'shazam.owners'
 const COLLAPSED_KEY = 'shazam.collapsed'
 const ALERTS_KEY = 'shazam.alerts'
+const DOCK_POSITION_KEY = 'shazam.dockPosition'
+
+function loadDockPosition(): DockPosition {
+  try {
+    return localStorage.getItem(DOCK_POSITION_KEY) === 'right' ? 'right' : 'bottom'
+  } catch {
+    return 'bottom'
+  }
+}
 
 /**
  * How long a row stays hidden after you act on it. Long enough for GitHub's
@@ -119,6 +130,15 @@ export function App() {
   const [lastClickedId, setLastClickedId] = useState<string | null>(null)
   // Lifted out of the dock so a badge on the board can expand it.
   const [dockCollapsed, setDockCollapsed] = useState(false)
+  const [dockPosition, setDockPosition] = useState<DockPosition>(loadDockPosition)
+  const changeDockPosition = useCallback((next: DockPosition) => {
+    setDockPosition(next)
+    try {
+      localStorage.setItem(DOCK_POSITION_KEY, next)
+    } catch {
+      // storage disabled
+    }
+  }, [])
   // Below 768px the board is swapped for the phone layout. Width rather than
   // user agent, so a narrowed desktop window gets it too.
   const isMobile = useIsMobile()
@@ -191,10 +211,7 @@ export function App() {
 
   const toggleOwner = useCallback(
     (owner: string) => {
-      const next = new Set(owners)
-      if (next.has(owner)) next.delete(owner)
-      else next.add(owner)
-      persistOwners(next)
+      persistOwners(cycleOwner(owners, owner))
     },
     [owners, persistOwners],
   )
@@ -329,8 +346,7 @@ export function App() {
           (item) =>
             !dismissed.has(item.id) || (item.kind === 'pull_request' && item.mergedAt !== null),
         )
-      const byOwner =
-        owners.size === 0 ? visible : visible.filter((item) => owners.has(ownerOf(item)))
+      const byOwner = visible.filter((item) => ownerPasses(owners, ownerOf(item)))
       map.set(
         column.id,
         byOwner.filter((item) => matchesFilter(item, parsedQuery)),
@@ -608,8 +624,16 @@ export function App() {
               data-density + group/density is how the cards learn the density:
               one attribute here, group variants down in the leaves, and no
               prop has to thread through the column registry. */}
+          {/* Board and dock share what is left: stacked when the dock sits at
+              the bottom, side by side when it is a column on the right. */}
           <div
-            className="group/density flex min-h-0 flex-1 items-stretch gap-3 overflow-x-auto px-4 py-3"
+            className={cn(
+              'flex min-h-0 flex-1',
+              dockPosition === 'right' ? 'flex-row' : 'flex-col',
+            )}
+          >
+          <div
+            className="group/density flex min-h-0 min-w-0 flex-1 items-stretch gap-3 overflow-x-auto px-4 py-3"
             data-density={density}
           >
             {orderedColumns.map((column) => {
@@ -641,6 +665,8 @@ export function App() {
             appearance={appearance}
             collapsed={dockCollapsed}
             onCollapsedChange={setDockCollapsed}
+            position={dockPosition}
+            onPositionChange={changeDockPosition}
             onSelect={sessions.setActiveId}
             onClose={(id) => void sessions.close(id)}
             fontSize={health?.terminalFontSize ?? 20}
@@ -648,6 +674,7 @@ export function App() {
             onShowItem={focusItem}
             onSessionsChanged={() => void sessions.reload()}
           />
+          </div>
           <KeyboardHelp />
           <BoardAlerts data={data} enabled={alertsOn} onFocusItem={focusItem} />
         </div>

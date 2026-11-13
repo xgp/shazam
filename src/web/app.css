@@ -263,15 +263,21 @@
 
 /* --- terminal dock ------------------------------------------------------ */
 
+/*
+ * The padding lives on .xterm, not the host: FitAddon sizes rows from the
+ * host's computed height and subtracts only .xterm's own padding, so padding
+ * here (under border-box) made it fit a row too many and clip the bottom line.
+ */
 .terminal-host {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 0.5rem;
+  min-width: 0;
   overflow: hidden;
 }
 
 .terminal-host .xterm {
   height: 100%;
+  padding: 0.5rem;
 }
 
 /* --- a session wanting your attention ----------------------------------- */

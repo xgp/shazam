@@ -103,14 +103,17 @@ export function IssueCard({ issue, ctx }: { issue: IssueItem; ctx: ColumnContext
         ))}
       </div>
 
-      <div className="mt-1.5 flex items-center justify-end gap-2">
+      {/* Same split as the PR card: helpers left, the finishing action right. */}
+      <div className="mt-1.5 flex items-center gap-2">
         <IssueShazamButton
           issue={issue}
           agents={ctx.agents}
           defaultAgent={ctx.defaultAgent}
           onLaunched={ctx.onSessionLaunched}
         />
-        <CloseIssueButton issue={issue} onDone={() => ctx.onActioned(issue.id)} />
+        <div className="ml-auto">
+          <CloseIssueButton issue={issue} onDone={() => ctx.onActioned(issue.id)} />
+        </div>
       </div>
     </Card>
   )

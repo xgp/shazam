@@ -7,6 +7,7 @@ import { absoluteTime, relativeTime } from '../lib/format.js'
 import { FixChangesButton, FixConflictButton } from './AgentFixButton.js'
 import { ApproveButton } from './ApproveButton.js'
 import { AuthorAvatar } from './AuthorAvatar.js'
+import { BranchChip } from './BranchChip.js'
 import { CopyLinkButton } from './CopyLinkButton.js'
 import { MergeButton } from './MergeButton.js'
 import { PingReviewersButton } from './PingReviewersButton.js'
@@ -69,6 +70,11 @@ export function PrCard({ pr, ctx, action }: PrCardProps) {
             </a>
             <CopyLinkButton url={pr.url} what={`${pr.repo.nameWithOwner} #${pr.number}`} />
           </div>
+          {/* Under the title, not beside the repo: the header line stays one
+              line, and the branch reads as a detail of this PR. */}
+          <div className="flex min-w-0">
+            <BranchChip pr={pr} />
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <Tooltip>
@@ -124,9 +130,11 @@ export function PrCard({ pr, ctx, action }: PrCardProps) {
       </div>
 
       {/* mt-1.5 on top of the card's gap: the buttons read as their own row,
-          not part of the chip cluster. */}
+          not part of the chip cluster. Helpers sit at the left; the one
+          button that finishes the PR (merge or approve) holds the right edge,
+          so it is always in the same place and never mistaken for a helper. */}
       {!merged ? (
-        <div className="mt-1.5 flex items-center justify-end gap-2">
+        <div className="mt-1.5 flex items-center gap-2">
           {/* Nudging reviewers is the author's move; on someone else's PR in
               the approved column it would be speaking for them. */}
           {action === 'merge' && pr.author === ctx.viewer ? (
@@ -139,10 +147,15 @@ export function PrCard({ pr, ctx, action }: PrCardProps) {
             defaultAgent={ctx.defaultAgent}
             onLaunched={onLaunched}
           />
-          {action === 'merge' ? (
-            <MergeButton pr={pr} defaultMethod={ctx.defaultMergeMethod} onDone={() => ctx.onActioned(pr.id)} />
+          {action !== 'none' ? (
+            <div className="ml-auto">
+              {action === 'merge' ? (
+                <MergeButton pr={pr} defaultMethod={ctx.defaultMergeMethod} onDone={() => ctx.onActioned(pr.id)} />
+              ) : (
+                <ApproveButton pr={pr} onDone={() => ctx.onActioned(pr.id)} />
+              )}
+            </div>
           ) : null}
-          {action === 'approve' ? <ApproveButton pr={pr} onDone={() => ctx.onActioned(pr.id)} /> : null}
         </div>
       ) : null}
     </Card>
