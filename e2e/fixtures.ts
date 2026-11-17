@@ -89,8 +89,11 @@ export const dashboard: DashboardData = {
       pr({ repo: 'acme/ground-control', title: 'Fix flaky clock test', checks: 'failure' }),
     ],
     reviewRequests: [
-      pr({ repo: 'globex/payments', title: 'Idempotency keys for refunds', author: 'hsimpson', commentCount: 8 }),
-      pr({ repo: 'globex/payments', title: 'Bump node to 22', author: 'mburns', reviewDecision: 'changes_requested' }),
+      pr({ repo: 'globex/payments', title: 'Idempotency keys for refunds', author: 'hsimpson', commentCount: 8, canMerge: false }),
+      pr({ repo: 'globex/payments', title: 'Bump node to 22', author: 'mburns', reviewDecision: 'changes_requested', canMerge: false }),
+      // No required review on this repo, and you have push access: yours to
+      // approve or just merge.
+      pr({ repo: 'globex/infra', title: 'Bump cloudflared from 2026.10.7 to 2026.11.0', author: 'dependabot', reviewDecision: 'none' }),
     ],
     approvedPrs: [
       pr({ repo: 'globex/web', title: 'Dark mode for the invoice view', author: 'lsimpson', reviewDecision: 'approved' }),

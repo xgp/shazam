@@ -37,7 +37,7 @@ test.describe('board', () => {
     await board.locator('[data-slot="badge"]', { hasText: /^globex\d/ }).click()
     // Nothing in My pull requests belongs to globex.
     await expect(tab(board, 'My pull requests')).toContainText('0')
-    await expect(tab(board, 'Waiting on my review')).toContainText('2')
+    await expect(tab(board, 'Waiting on my review')).toContainText('3')
   })
 
   test('the menu carries what desktop tooltips would, and reorders columns', async ({ board }) => {
