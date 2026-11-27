@@ -48,6 +48,36 @@ const STATE_COLOR: Record<ReviewerState, ChipColor> = {
 const countPending = (panel: ReviewersPanel): number =>
   panel.reviewers.filter((r) => r.state === 'pending').length
 
+/** A reviewer change sent to GitHub that has not come back yet. */
+interface PendingEdit {
+  kind: 'add' | 'remove'
+  person: ReviewerCandidate
+  isTeam: boolean
+}
+
+/**
+ * The panel as it will look once `edits` land. Adding asks (or re-asks)
+ * someone, so they show as waiting; removing puts a person back among the
+ * candidates. Teams are never candidates, so a removed team just goes.
+ */
+function applyEdits(panel: ReviewersPanel, edits: PendingEdit[]): ReviewersPanel {
+  let { reviewers, candidates } = panel
+  for (const { kind, person, isTeam } of edits) {
+    if (kind === 'add') {
+      reviewers = reviewers.some((r) => r.login === person.login)
+        ? reviewers.map((r) => (r.login === person.login ? { ...r, state: 'pending' } : r))
+        : [...reviewers, { ...person, isTeam, state: 'pending' }]
+      candidates = candidates.filter((c) => c.login !== person.login)
+    } else {
+      reviewers = reviewers.filter((r) => r.login !== person.login)
+      if (!isTeam && !candidates.some((c) => c.login === person.login)) {
+        candidates = [...candidates, person].sort((a, b) => a.login.localeCompare(b.login))
+      }
+    }
+  }
+  return { ...panel, reviewers, candidates }
+}
+
 /**
  * The same person glyphs the card's ReviewChip uses, so "approved" looks the
  * same wherever it appears - and blue rather than green for the same reason
@@ -100,7 +130,12 @@ export function ReviewersButton({ pr, onChanged }: ReviewersButtonProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
-  const [busy, setBusy] = useState<string | null>(null)
+  /**
+   * Edits in flight, by login. Each one runs on its own and the panel shows
+   * it as already done, so asking three people is three clicks, not three
+   * round trips one after another.
+   */
+  const [inflight, setInflight] = useState<Record<string, PendingEdit>>({})
   /** Index into `matches` the arrow keys have reached; -1 = nothing chosen. */
   const [highlight, setHighlight] = useState(-1)
   const listRef = useRef<HTMLDivElement>(null)
@@ -109,6 +144,10 @@ export function ReviewersButton({ pr, onChanged }: ReviewersButtonProps) {
   const [observed, setObserved] = useState<{ pending: number; fromDashboard: number } | null>(null)
   const toast = useToast()
   const live = useRef(true)
+  const openRef = useRef(open)
+  openRef.current = open
+  /** Only the latest read may land; an older one would undo a newer edit. */
+  const loadSeq = useRef(0)
 
   useEffect(() => {
     live.current = true
@@ -119,10 +158,11 @@ export function ReviewersButton({ pr, onChanged }: ReviewersButtonProps) {
 
   const load = useCallback(
     async (q?: string) => {
+      const seq = ++loadSeq.current
       setLoading(true)
       try {
         const next = await api.reviewers(pr.repo.nameWithOwner, pr.number, q)
-        if (!live.current) return
+        if (!live.current || seq !== loadSeq.current) return
         setPanel(next)
         setObserved({
           pending: countPending(next),
@@ -130,10 +170,10 @@ export function ReviewersButton({ pr, onChanged }: ReviewersButtonProps) {
         })
         setError(null)
       } catch (err) {
-        if (!live.current) return
+        if (!live.current || seq !== loadSeq.current) return
         setError(err instanceof Error ? err.message : String(err))
       } finally {
-        if (live.current) setLoading(false)
+        if (live.current && seq === loadSeq.current) setLoading(false)
       }
     },
     [pr.repo.nameWithOwner, pr.number, pr.pendingReviewerCount],
@@ -171,14 +211,20 @@ export function ReviewersButton({ pr, onChanged }: ReviewersButtonProps) {
     return () => clearTimeout(timer)
   }, [open, panel?.truncated, query, load])
 
+  /** What GitHub last told us, with everything still in flight applied. */
+  const view = useMemo(
+    () => (panel ? applyEdits(panel, Object.values(inflight)) : null),
+    [panel, inflight],
+  )
+
   const matches = useMemo(() => {
     const needle = query.trim().toLowerCase()
-    if (!needle) return panel?.candidates ?? []
-    return (panel?.candidates ?? []).filter(
+    if (!needle) return view?.candidates ?? []
+    return (view?.candidates ?? []).filter(
       (c) =>
         c.login.toLowerCase().includes(needle) || (c.name ?? '').toLowerCase().includes(needle),
     )
-  }, [panel?.candidates, query])
+  }, [view?.candidates, query])
 
   // Any refilter drops the highlight: the same index would silently point at
   // a different person.
@@ -193,22 +239,49 @@ export function ReviewersButton({ pr, onChanged }: ReviewersButtonProps) {
     listRef.current?.querySelector('[data-highlighted]')?.scrollIntoView({ block: 'nearest' })
   }, [highlight])
 
-  const edit = async (add: string[], remove: string[], what: string) => {
-    setBusy(add[0] ?? remove[0] ?? '')
+  const isInflight = (login: string) => Object.hasOwn(inflight, login)
+  /** The same set, readable before React re-renders - a double click lands
+   *  twice in one frame. */
+  const sending = useRef(new Set<string>())
+
+  const edit = async (pending: PendingEdit, what: string) => {
+    const { login } = pending.person
+    if (sending.current.has(login)) return
+    sending.current.add(login)
+    setInflight((current) => ({ ...current, [login]: pending }))
+    if (pending.kind === 'add') setQuery('')
+    const settle = () => {
+      sending.current.delete(login)
+      setInflight((current) => {
+        const { [login]: _, ...rest } = current
+        return rest
+      })
+    }
     try {
-      const result = await api.editReviewers(pr.url, add, remove)
+      const result = await api.editReviewers(
+        pr.url,
+        pending.kind === 'add' ? [login] : [],
+        pending.kind === 'remove' ? [login] : [],
+      )
       toast(result.ok ? what : result.message, result.ok ? 'success' : 'error')
       if (result.ok) {
-        setQuery('')
-        await load()
+        // Fold the edit into the panel before dropping it from the overlay so
+        // the row does not flicker back while the re-read is on its way.
+        setPanel((current) => (current ? applyEdits(current, [pending]) : current))
+        settle()
+        if (live.current && openRef.current) void load()
         onChanged()
+      } else {
+        settle()
       }
     } catch (err) {
       toast(err instanceof Error ? err.message : String(err), 'error')
-    } finally {
-      if (live.current) setBusy(null)
+      settle()
     }
   }
+
+  const ask = (person: ReviewerCandidate, isTeam: boolean, what: string) =>
+    void edit({ kind: 'add', person, isTeam }, what)
 
   /**
    * The count on the card, in order of how much we trust it.
@@ -224,7 +297,7 @@ export function ReviewersButton({ pr, onChanged }: ReviewersButtonProps) {
    * know it has caught up - or that someone else has changed the reviewers
    * since, which our reading would otherwise paper over indefinitely.
    */
-  const pending = panel ? countPending(panel) : (observed?.pending ?? pr.pendingReviewerCount)
+  const pending = view ? countPending(view) : (observed?.pending ?? pr.pendingReviewerCount)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -261,20 +334,25 @@ export function ReviewersButton({ pr, onChanged }: ReviewersButtonProps) {
 
           {error ? <span className="text-xs text-destructive">{error}</span> : null}
 
-          {panel && panel.reviewers.length === 0 && !loading ? (
+          {view && view.reviewers.length === 0 && !loading ? (
             <span className="text-xs text-muted-foreground">Nobody has been asked yet.</span>
           ) : null}
 
-          {panel && panel.reviewers.length > 0 ? (
+          {view && view.reviewers.length > 0 ? (
             <div className="flex flex-col gap-1">
-              {panel.reviewers.map((reviewer) => (
+              {view.reviewers.map((reviewer) => (
                 <ReviewerRow
                   key={reviewer.login}
                   reviewer={reviewer}
-                  busy={busy === reviewer.login}
-                  onRemove={() => void edit([], [reviewer.login], `Removed ${reviewer.login}`)}
+                  busy={isInflight(reviewer.login)}
+                  onRemove={() =>
+                    void edit(
+                      { kind: 'remove', person: reviewer, isTeam: reviewer.isTeam },
+                      `Removed ${reviewer.login}`,
+                    )
+                  }
                   onReRequest={() =>
-                    void edit([reviewer.login], [], `Asked ${reviewer.login} again`)
+                    ask(reviewer, reviewer.isTeam, `Asked ${reviewer.login} again`)
                   }
                 />
               ))}
@@ -309,9 +387,9 @@ export function ReviewersButton({ pr, onChanged }: ReviewersButtonProps) {
                         : matches.length === 1
                           ? matches[0]
                           : undefined
-                    if (!pick || busy !== null) return
+                    if (!pick || isInflight(pick.login)) return
                     event.preventDefault()
-                    void edit([pick.login], [], `Asked ${pick.login} to review`)
+                    ask(pick, false, `Asked ${pick.login} to review`)
                   }
                 }}
                 role="combobox"
@@ -347,17 +425,10 @@ export function ReviewersButton({ pr, onChanged }: ReviewersButtonProps) {
                           // look for "this row is the one", however reached.
                           index === highlight && 'bg-accent',
                         )}
-                        disabled={busy !== null}
-                        onClick={() =>
-                          void edit([candidate.login], [], `Asked ${candidate.login} to review`)
-                        }
+                        onClick={() => ask(candidate, false, `Asked ${candidate.login} to review`)}
                       >
                         <Person {...candidate} />
-                        {busy === candidate.login ? (
-                          <Loader2 className="size-3 animate-spin" />
-                        ) : (
-                          <Plus className="size-3.5" />
-                        )}
+                        <Plus className="size-3.5" />
                       </button>
                     ))}
                   </div>
@@ -403,7 +474,12 @@ function ReviewerRow({
         {!busy && reviewer.state !== 'pending' ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-xs" onClick={onReRequest}>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={`Ask ${reviewer.login} again`}
+                onClick={onReRequest}
+              >
                 <RefreshCw />
               </Button>
             </TooltipTrigger>
@@ -413,7 +489,12 @@ function ReviewerRow({
         {!busy ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-xs" onClick={onRemove}>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={`Remove ${reviewer.login}`}
+                onClick={onRemove}
+              >
                 <X />
               </Button>
             </TooltipTrigger>
