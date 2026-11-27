@@ -57,8 +57,14 @@ function ShazamSplit({ agents, defaultAgent, onLaunched, title, tooltip, start }
         <TooltipTrigger asChild>
           {/* Tagged even though inert: the shortcut handler checks disabled
               itself, and finding a disabled button beats finding nothing. */}
-          <Button size="xs" className={cn('text-sm', BUTTON_SOFT.gray)} disabled data-card-action="shazam">
-            <Zap /> Shazam
+          <Button
+            size="xs"
+            className={cn('text-sm', BUTTON_SOFT.gray)}
+            disabled
+            aria-label="Shazam"
+            data-card-action="shazam"
+          >
+            <Zap />
           </Button>
         </TooltipTrigger>
         <TooltipContent>Neither claude nor codex was found on PATH</TooltipContent>
@@ -76,10 +82,12 @@ function ShazamSplit({ agents, defaultAgent, onLaunched, title, tooltip, start }
             disabled={busy}
             // Only the primary half: the board's `s` shortcut means "launch
             // the default agent", never "open the agent picker".
+            // Icon only: the bolt is the brand, and the card's row is tight.
+            aria-label={`Shazam - open in ${primary.label}`}
             data-card-action="shazam"
             onClick={() => void launch(primary.id)}
           >
-            {busy ? <Loader2 className="animate-spin" /> : <Zap />} Shazam
+            {busy ? <Loader2 className="animate-spin" /> : <Zap />}
           </Button>
         </TooltipTrigger>
         <TooltipContent>{tooltip(primary.label)}</TooltipContent>

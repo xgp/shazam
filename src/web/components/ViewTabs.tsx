@@ -10,8 +10,9 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { ALL_VIEW_ID, type SavedView } from '../hooks/useSavedViews.js'
+import { ALL_VIEW_ID, BUILT_IN_VIEWS, type SavedView } from '../hooks/useSavedViews.js'
 
 export interface ViewTabsProps {
   views: SavedView[]
@@ -66,6 +67,29 @@ export function ViewTabs({
       <button type="button" className={tabClass(activeId === ALL_VIEW_ID)} onClick={() => onSelect(ALL_VIEW_ID)}>
         All
       </button>
+
+      {BUILT_IN_VIEWS.map((view) => (
+        // A little slower than the board's other tooltips: these sit on a row
+        // the pointer crosses on the way to the filter box.
+        <Tooltip key={view.id} delayDuration={600}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className={tabClass(activeId === view.id)}
+              onClick={() => onSelect(view.id)}
+            >
+              {view.name}
+              {activeId === view.id && modified ? (
+                <span className="size-1.5 shrink-0 rounded-full bg-primary" />
+              ) : null}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-72">
+            {view.description}
+            <span className="mt-0.5 block font-mono opacity-70">{view.q}</span>
+          </TooltipContent>
+        </Tooltip>
+      ))}
 
       {views.map((view) => {
         const active = view.id === activeId

@@ -19,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import type {
+  CardReviewer,
   PullRequestItem,
   Reviewer,
   ReviewerCandidate,
@@ -43,6 +44,33 @@ const STATE_COLOR: Record<ReviewerState, ChipColor> = {
   changes_requested: 'red',
   commented: 'gray',
   dismissed: 'gray',
+}
+
+/** "alice, bob and 1 more": the named people, plus teams and anyone unnamed. */
+function describeWaiting(waiting: CardReviewer[], pending: number): string {
+  const names = waiting.map((r) => r.login)
+  const others = pending - names.length
+  if (names.length === 0) return `${pending} reviewer${pending === 1 ? '' : 's'}`
+  return others > 0 ? `${names.join(', ')} and ${others} more` : names.join(', ')
+}
+
+/**
+ * Up to two reviewers' avatars, overlapped, in place of the add-person icon:
+ * the card says who is reviewing without opening anything. Waiting reviewers
+ * come first, since that is who the PR is stuck on.
+ */
+function ReviewerFaces({ people }: { people: CardReviewer[] }) {
+  const shown = people.slice(0, 2)
+  return (
+    <span className="flex items-center -space-x-1.5">
+      {shown.map((r) => (
+        <Avatar key={r.login} className="size-4 ring-1 ring-background">
+          <AvatarImage src={`https://github.com/${r.login}.png?size=32`} alt={r.login} />
+          <AvatarFallback className="text-[9px]">{r.login.slice(0, 1).toUpperCase()}</AvatarFallback>
+        </Avatar>
+      ))}
+    </span>
+  )
 }
 
 const countPending = (panel: ReviewersPanel): number =>
@@ -225,6 +253,29 @@ export function ReviewersButton({ pr, onChanged }: ReviewersButtonProps) {
    * since, which our reading would otherwise paper over indefinitely.
    */
   const pending = panel ? countPending(panel) : (observed?.pending ?? pr.pendingReviewerCount)
+  // The people to name on the button: the open panel's reading when there is
+  // one, the poll's otherwise. Teams count toward `pending` but have no face.
+  const people: CardReviewer[] = panel
+    ? panel.reviewers.filter((r) => !r.isTeam).map((r) => ({ login: r.login, state: r.state }))
+    : // Absent from a server older than this page (dist is rebuilt under a
+      // running server); fall back to the count alone.
+      (pr.reviewers ?? [])
+  const waiting = people.filter((r) => r.state === 'pending')
+  const answered = people.filter((r) => r.state !== 'pending')
+  // Amber while someone owes a review, red while changes stand; otherwise the
+  // faces on it say who has looked.
+  const color =
+    pending > 0
+      ? 'amber'
+      : answered.some((r) => r.state === 'changes_requested')
+        ? 'red'
+        : 'gray'
+  const tooltip =
+    pending > 0
+      ? `Waiting on ${describeWaiting(waiting, pending)} - see who, or ask someone else`
+      : answered.length > 0
+        ? `${answered.map((r) => `${r.login} ${STATE_LABEL[r.state]}`).join(', ')} - see who has looked, or ask someone`
+        : 'Nobody has been asked to review - ask someone'
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -236,18 +287,14 @@ export function ReviewersButton({ pr, onChanged }: ReviewersButtonProps) {
               aria-label="Request reviewers"
               // The board's `r` shortcut clicks this to open the popover.
               data-card-action="reviewers"
-              className={cn('text-sm', BUTTON_SOFT[pending > 0 ? 'amber' : 'gray'])}
+              className={cn('text-sm', BUTTON_SOFT[color])}
             >
-              <UserPlus />
+              {people.length > 0 ? <ReviewerFaces people={people} /> : <UserPlus />}
               {pending > 0 ? <span className="font-bold">{pending}</span> : null}
             </Button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>
-          {pending > 0
-            ? `${pending} reviewer${pending === 1 ? '' : 's'} have not answered yet - see who, or ask someone else`
-            : 'Nobody is waiting to review - see who has looked, or ask someone'}
-        </TooltipContent>
+        <TooltipContent>{tooltip}</TooltipContent>
       </Tooltip>
 
       <PopoverContent side="top" align="end" className="w-[340px] max-w-[92vw] p-3">

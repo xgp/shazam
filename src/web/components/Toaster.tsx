@@ -60,8 +60,9 @@ export function Toaster({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      {/* Top-right, away from the terminal dock's corner; newest at the top. */}
-      <div className="fixed top-4 right-4 z-50 flex max-w-[420px] flex-col-reverse gap-2">
+      {/* Top center: clear of the header's refresh on the right and of the
+          terminal dock's corner; newest at the top. */}
+      <div className="fixed top-4 left-1/2 z-50 flex w-max max-w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 flex-col-reverse gap-2">
         {toasts.map((toast) => (
           <div
             key={toast.id}

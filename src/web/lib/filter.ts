@@ -1,4 +1,9 @@
-import type { CheckState, DashboardItem, ReviewDecision } from '../../shared/types.js'
+import type {
+  CheckState,
+  DashboardItem,
+  PullRequestItem,
+  ReviewDecision,
+} from '../../shared/types.js'
 
 /**
  * The filter box's query language, GitHub-search style: space-separated terms
@@ -97,8 +102,55 @@ export function parseFilter(input: string): FilterQuery {
   return { terms }
 }
 
+/** What some terms need beyond the row itself. */
+export interface FilterContext {
+  /** The signed-in login, for "mine" and "already approved by me". */
+  viewer: string
+}
+
+/** Checks that will not hold a merge or an approval back. */
+const checksClear = (pr: PullRequestItem) => pr.checks === 'success' || pr.checks === 'none'
+
+/**
+ * `is:approvable` - someone else's open, non-draft PR with clear checks and no
+ * changes standing, that the viewer has not already approved. The "Ready to
+ * approve" tab.
+ */
+function approvable(pr: PullRequestItem, viewer: string): boolean {
+  return (
+    pr.mergedAt === null &&
+    !pr.isDraft &&
+    pr.author !== viewer &&
+    checksClear(pr) &&
+    pr.reviewDecision !== 'changes_requested' &&
+    !(pr.reviewers ?? []).some((r) => r.login === viewer && r.state === 'approved')
+  )
+}
+
+/**
+ * `is:needs-review` - the viewer's own open, non-draft PR with no approval
+ * yet. The "Needs review" tab.
+ */
+function needsReview(pr: PullRequestItem, viewer: string): boolean {
+  return (
+    pr.mergedAt === null &&
+    !pr.isDraft &&
+    pr.author === viewer &&
+    pr.reviewDecision !== 'approved' &&
+    (pr.approvals ?? []).length === 0
+  )
+}
+
+/**
+ * `is:mergeable` - open, and the viewer could press Merge now with clear
+ * checks. The "Ready to merge" tab.
+ */
+function readyToMerge(pr: PullRequestItem): boolean {
+  return pr.mergedAt === null && !pr.isDraft && pr.canMerge && checksClear(pr)
+}
+
 /** Whether one term holds for one row, before negation is applied. */
-function termMatches(item: DashboardItem, term: FilterTerm): boolean {
+function termMatches(item: DashboardItem, term: FilterTerm, ctx: FilterContext): boolean {
   const pr = item.kind === 'pull_request' ? item : null
   const value = term.value
   switch (term.key) {
@@ -125,6 +177,9 @@ function termMatches(item: DashboardItem, term: FilterTerm): boolean {
       if (value === 'issue') return item.kind === 'issue'
       if (value === 'draft') return pr !== null && pr.isDraft
       if (value === 'merged') return pr !== null && pr.mergedAt !== null
+      if (value === 'approvable') return pr !== null && approvable(pr, ctx.viewer)
+      if (value === 'mergeable') return pr !== null && readyToMerge(pr)
+      if (value === 'needs-review') return pr !== null && needsReview(pr, ctx.viewer)
       // Everything else on the board is open; accepted so a pasted GitHub query works.
       if (value === 'open') return pr === null || pr.mergedAt === null
       return false
@@ -138,6 +193,10 @@ function termMatches(item: DashboardItem, term: FilterTerm): boolean {
 }
 
 /** True when the row survives the filter. An empty query keeps everything. */
-export function matchesFilter(item: DashboardItem, query: FilterQuery): boolean {
-  return query.terms.every((term) => termMatches(item, term) !== term.negated)
+export function matchesFilter(
+  item: DashboardItem,
+  query: FilterQuery,
+  ctx: FilterContext = { viewer: '' },
+): boolean {
+  return query.terms.every((term) => termMatches(item, term, ctx) !== term.negated)
 }

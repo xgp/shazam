@@ -96,7 +96,7 @@ export function PrCard({ pr, ctx, action }: PrCardProps) {
         <MergedChip mergedAt={pr.mergedAt} mergedBy={pr.mergedBy} />
         <DraftChip isDraft={pr.isDraft} />
         <ChecksChip state={pr.checks} prUrl={pr.url} />
-        <ReviewChip decision={pr.reviewDecision} />
+        <ReviewChip decision={pr.reviewDecision} approvals={pr.approvals} />
         {!merged && pr.reviewDecision === 'changes_requested' ? (
           <FixChangesButton
             pr={pr}

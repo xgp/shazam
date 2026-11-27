@@ -57,6 +57,16 @@ export interface RepoRef {
   url: string
 }
 
+export interface Approval {
+  login: string
+  submittedAt: string | null
+}
+
+export interface CardReviewer {
+  login: string
+  state: ReviewerState
+}
+
 export interface PullRequestItem {
   kind: 'pull_request'
   id: string
@@ -74,6 +84,8 @@ export interface PullRequestItem {
   baseRef: string
   checks: CheckState
   reviewDecision: ReviewDecision
+  /** Reviewers whose standing verdict is an approval, earliest first. */
+  approvals: Approval[]
   mergeable: MergeableState
   /** Whether GitHub would take the merge, and if not, why. */
   mergeState: MergeState
@@ -81,6 +93,13 @@ export interface PullRequestItem {
   commentCount: number
   /** Reviewers who have been asked and have not answered. */
   pendingReviewerCount: number
+  /**
+   * Who is on it now, people only: those asked and not yet answered
+   * (`pending`), then everyone whose latest review stands. Teams count toward
+   * `pendingReviewerCount` but are not listed. The reviewers button names
+   * these, so a PR somebody already approved does not read as "nobody".
+   */
+  reviewers: CardReviewer[]
   /** Unresolved inline review threads. */
   unresolvedThreadCount: number
   changedFiles: number

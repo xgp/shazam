@@ -1,9 +1,12 @@
 import {
+  type Approval,
+  type CardReviewer,
   type CheckState,
   type IssueItem,
   type MergeMethod,
   type MergeableState,
   type PullRequestItem,
+  type ReviewerState,
   type RepoRef,
   type ReviewDecision,
   reviewSatisfied,
@@ -55,12 +58,16 @@ export interface RawPr {
   additions: number
   deletions: number
   comments: { totalCount: number }
-  reviewRequests: { totalCount: number }
+  reviewRequests: {
+    totalCount: number
+    /** Absent on the merged column's lean query. A team has no login. */
+    nodes?: ({ requestedReviewer: { login?: string } | null } | null)[]
+  }
   reviewThreads: { nodes: ({ isResolved: boolean } | null)[] }
   commits: { nodes: ({ commit: { statusCheckRollup: { state: string } | null } } | null)[] }
-  /** Fetched only by the approvedPrs search; the other aliases skip it. */
+  /** Absent on the merged column's lean query. */
   latestOpinionatedReviews?: {
-    nodes: ({ state: string; author: { login: string } | null } | null)[]
+    nodes: ({ state: string; submittedAt?: string | null; author: { login: string } | null } | null)[]
   }
 }
 
@@ -74,6 +81,46 @@ export function viewerApproved(raw: RawPr, viewer: string): boolean {
   return (raw.latestOpinionatedReviews?.nodes ?? []).some(
     (review) => review?.state === 'APPROVED' && review.author?.login === viewer,
   )
+}
+
+const REVIEW_STATES: Record<string, ReviewerState> = {
+  APPROVED: 'approved',
+  CHANGES_REQUESTED: 'changes_requested',
+  COMMENTED: 'commented',
+  DISMISSED: 'dismissed',
+}
+
+/**
+ * People on the PR: asked and waiting first, then standing reviews. A person
+ * asked again after reviewing is waiting, so the request wins.
+ */
+function cardReviewers(raw: RawPr): CardReviewer[] {
+  const out: CardReviewer[] = []
+  const seen = new Set<string>()
+  for (const node of raw.reviewRequests.nodes ?? []) {
+    const login = node?.requestedReviewer?.login
+    if (!login || seen.has(login)) continue
+    seen.add(login)
+    out.push({ login, state: 'pending' })
+  }
+  for (const review of raw.latestOpinionatedReviews?.nodes ?? []) {
+    const login = review?.author?.login
+    const state = review ? REVIEW_STATES[review.state] : undefined
+    if (!login || !state || seen.has(login)) continue
+    seen.add(login)
+    out.push({ login, state })
+  }
+  return out
+}
+
+/** Each reviewer whose standing verdict is an approval, earliest first. */
+function approvals(raw: RawPr): Approval[] {
+  const out: Approval[] = []
+  for (const review of raw.latestOpinionatedReviews?.nodes ?? []) {
+    if (review?.state !== 'APPROVED') continue
+    out.push({ login: review.author?.login ?? 'ghost', submittedAt: review.submittedAt ?? null })
+  }
+  return out.sort((a, b) => (a.submittedAt ?? '').localeCompare(b.submittedAt ?? ''))
 }
 
 export interface RawIssue {
@@ -169,12 +216,14 @@ export function normalizePr(raw: RawPr): PullRequestItem {
     baseRef: raw.baseRefName,
     checks,
     reviewDecision: decision,
+    approvals: approvals(raw),
     mergeable: merge,
     // Too expensive to ask for in the dashboard query; applyMergeStates fills
     // it in afterwards for the few PRs whose Merge button is otherwise live.
     mergeState: 'unknown',
     commentCount: raw.comments.totalCount,
     pendingReviewerCount: raw.reviewRequests.totalCount,
+    reviewers: cardReviewers(raw),
     unresolvedThreadCount: raw.reviewThreads.nodes.filter((n) => n && !n.isResolved).length,
     changedFiles: raw.changedFiles,
     additions: raw.additions,

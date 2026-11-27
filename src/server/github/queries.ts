@@ -58,12 +58,28 @@ const PR_FRAGMENT = /* GraphQL */ `
     comments {
       totalCount
     }
-    reviewRequests(first: 0) {
+    reviewRequests(first: 10) {
       totalCount
+      nodes {
+        requestedReviewer {
+          ... on User {
+            login
+          }
+        }
+      }
     }
     reviewThreads(first: 50) {
       nodes {
         isResolved
+      }
+    }
+    latestOpinionatedReviews(first: 10) {
+      nodes {
+        state
+        submittedAt
+        author {
+          login
+        }
       }
     }
     commits(last: 1) {
@@ -135,10 +151,10 @@ export const PR_SEARCH_QUERY = /* GraphQL */ `
 `
 
 /**
- * The approved column pays for review nodes the others do not need: search can
- * say "the viewer reviewed it" but not "the viewer's review was an approval",
- * so the poller reads the viewer's standing verdict off each row and keeps the
- * approved ones.
+ * Search can say "the viewer reviewed it" but not "the viewer's review was an
+ * approval", so the poller reads the viewer's standing verdict off each row's
+ * latestOpinionatedReviews (part of PrFields, which also names the approvers on
+ * every card) and keeps the approved ones.
  */
 export const APPROVED_PR_SEARCH_QUERY = /* GraphQL */ `
   ${REPO_FRAGMENT}
@@ -148,16 +164,6 @@ export const APPROVED_PR_SEARCH_QUERY = /* GraphQL */ `
     search(query: $search, type: ISSUE, first: $limit) {
       nodes {
         ...PrFields
-        ... on PullRequest {
-          latestOpinionatedReviews(first: 10) {
-            nodes {
-              state
-              author {
-                login
-              }
-            }
-          }
-        }
       }
     }
   }

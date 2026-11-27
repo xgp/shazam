@@ -23,6 +23,38 @@ const ACTIVE_KEY = 'shazam.activeView'
  */
 export const ALL_VIEW_ID = 'all'
 
+/**
+ * Built-in tabs after All, defined by filter terms (lib/filter.ts) and, like
+ * All, never stored: they cannot be renamed, deleted or saved over.
+ */
+export const BUILT_IN_VIEWS: readonly (SavedView & { description: string })[] = [
+  {
+    id: 'builtin:needs-review',
+    name: 'Needs review',
+    q: 'is:needs-review',
+    owners: [],
+    description: 'Your open pull requests that nobody has approved yet (drafts left out)',
+  },
+  {
+    id: 'builtin:approvable',
+    name: 'Ready to approve',
+    q: 'is:approvable',
+    owners: [],
+    description:
+      "Others' pull requests you have not approved yet, with checks passing and no changes requested",
+  },
+  {
+    id: 'builtin:mergeable',
+    name: 'Ready to merge',
+    q: 'is:mergeable',
+    owners: [],
+    description: 'Pull requests you can merge right now, with checks passing',
+  },
+]
+
+const findView = (views: SavedView[], id: string | null) =>
+  BUILT_IN_VIEWS.find((view) => view.id === id) ?? views.find((view) => view.id === id) ?? null
+
 function loadViews(): SavedView[] {
   try {
     const raw = localStorage.getItem(VIEWS_KEY)
@@ -51,7 +83,7 @@ export function activeViewQuery(): string {
   try {
     const id = localStorage.getItem(ACTIVE_KEY)
     if (!id || id === ALL_VIEW_ID) return ''
-    return loadViews().find((view) => view.id === id)?.q ?? ''
+    return findView(loadViews(), id)?.q ?? ''
   } catch {
     return ''
   }
@@ -87,7 +119,7 @@ export function useSavedViews() {
 
   // A stored id pointing at a deleted view falls back to All by lookup rather
   // than by validation, so a stale ACTIVE_KEY self-heals.
-  const activeView = views.find((view) => view.id === activeId) ?? null
+  const activeView = findView(views, activeId)
 
   const save = (name: string, q: string, owners: string[]) => {
     const view: SavedView = { id: crypto.randomUUID(), name, q, owners }

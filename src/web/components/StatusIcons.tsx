@@ -15,7 +15,7 @@ import type { ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import type { CheckState, MergeableState, ReviewDecision } from '../../shared/types.js'
+import type { Approval, CheckState, MergeableState, ReviewDecision } from '../../shared/types.js'
 import { absoluteTime, relativeTime } from '../lib/format.js'
 import { type ChipColor, CHIP_SOFT } from './chips.js'
 import { CommentsPopover } from './CommentsPopover.js'
@@ -87,7 +87,15 @@ export function ChecksChip({ state, prUrl }: { state: CheckState; prUrl?: string
   }
 }
 
-export function ReviewChip({ decision }: { decision: ReviewDecision }) {
+function approvedTooltip(approvals: Approval[] = []): string {
+  if (approvals.length === 0) return 'Approved'
+  const who = approvals.map((a) =>
+    a.submittedAt ? `${a.login} (${relativeTime(a.submittedAt)})` : a.login,
+  )
+  return `Approved by ${who.join(', ')}`
+}
+
+export function ReviewChip({ decision, approvals }: { decision: ReviewDecision; approvals?: Approval[] }) {
   switch (decision) {
     // Icon-only, and every glyph is a person: a review verdict is a human
     // verdict, where the circled marks beside these belong to CI. The word
@@ -95,7 +103,7 @@ export function ReviewChip({ decision }: { decision: ReviewDecision }) {
     case 'approved':
       // Deliberately not the green circled check: that is CI's mark, and the
       // two chips sit side by side on a card.
-      return <Chip tooltip="Approved" color="blue" icon={<UserCheck />} />
+      return <Chip tooltip={approvedTooltip(approvals)} color="blue" icon={<UserCheck />} />
     case 'changes_requested':
       return <Chip tooltip="Changes requested" color="red" icon={<UserPen />} />
     case 'review_required':

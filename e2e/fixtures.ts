@@ -44,7 +44,9 @@ function pr(overrides: Partial<PullRequestItem> & { repo: string; title: string 
     mergeable: 'mergeable',
     mergeState: 'clean',
     commentCount: 0,
+    approvals: [],
     pendingReviewerCount: 1,
+    reviewers: [{ login: 'hubot', state: 'pending' }],
     unresolvedThreadCount: 0,
     changedFiles: 3,
     additions: 120,
@@ -95,7 +97,14 @@ export const dashboard: DashboardData = {
       pr({ repo: 'initech/payments', title: 'Rename src/payments/refunds/IdempotencyKeyReconciliationServiceFactoryImplementation.ts', author: 'mburns' }),
     ],
     approvedPrs: [
-      pr({ repo: 'globex/web', title: 'Dark mode for the invoice view', author: 'lsimpson', reviewDecision: 'approved' }),
+      pr({
+        repo: 'globex/web',
+        title: 'Dark mode for the invoice view',
+        author: 'lsimpson',
+        reviewDecision: 'approved',
+        pendingReviewerCount: 0,
+        reviewers: [{ login: 'carol', state: 'approved' }],
+      }),
     ],
     recentlyMerged: [
       pr({ repo: 'acme/rocket', title: 'Stage separation timing', mergedAt: ago(30), mergedBy: 'octocat', reviewDecision: 'approved' }),
