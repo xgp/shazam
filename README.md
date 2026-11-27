@@ -255,6 +255,30 @@ The primary half opens `defaultAgent`; the caret picks the other one. Agents
 that were not found on `PATH` at startup are disabled rather than hidden, and
 `defaultAgent` falls back to whichever one is installed.
 
+### Cleaning up worktrees
+
+Every Shazam leaves a full checkout behind, often with `node_modules` or a build in it, so shazam removes its own worktrees once the work is finished. A worktree under `~/.shazam/worktrees/` is removed when all of these hold:
+
+- Its PR is merged or closed, or its issue is closed, and at least `worktreeCleanupGraceHours` (24 by default) have passed since, so a follow-up right after a merge still finds the checkout.
+- For an issue worktree, no open PR is still on its branch.
+- No agent session or companion shell is running in it, and no session in that repository is still preparing its worktree.
+- `git status --porcelain` shows nothing but disposable caches: `node_modules`, `__pycache__`, `.pytest_cache`, `.venv`, `dist`, `build`, `target`, `coverage`, `*.pyc` and the like, plus `.claude/settings.local.json`. Any other untracked file keeps the worktree, since an agent's uncommitted new file exists nowhere else. Ignored files never count.
+- Its HEAD is contained in a remote ref: the PR's own `refs/pull/<n>/head` (which GitHub keeps after a squash merge and after the branch is deleted), the head of the PR that closed an issue, or any branch on the remote. Ancestry against the base branch is not used, because a squash merge breaks it.
+
+Removal is `git worktree remove --force` and `git worktree prune` against the mirror. The local branch is deleted only when its tip is also on a remote ref, and the fetched `refs/remotes/origin/pr/<n>` goes with a PR's worktree. Mirrors themselves are kept.
+
+The sweep runs after the first poll on startup and then at most every 15 minutes, again after a poll. Open PRs and issues on the board, and anything in Merged recently, are answered from the rows that poll just fetched; the rest go to GitHub in a single aliased GraphQL request. Every removal is logged with its reason and the space it freed, and every skip is logged with its reason (once per reason, so the log does not repeat itself every 15 minutes).
+
+To see or run a sweep by hand:
+
+```sh
+shazam worktrees prune --dry-run              # what would go, and why the rest stays
+shazam worktrees prune                        # remove them now
+shazam worktrees prune --grace-hours 0        # ignore the grace period this once
+```
+
+With a server running, the command asks it to sweep (`POST /api/worktrees/prune`), so live sessions are respected; with no server there are no sessions, and the command sweeps on its own. Set `"autoCleanupWorktrees": false` to stop the automatic sweep; the command still works.
+
 ## On a phone
 
 Below 768px wide, shazam swaps the board for a phone layout. It switches on
@@ -328,6 +352,8 @@ Optional, at `~/.shazam/config.json`:
   "defaultMergeMethod": "squash",
   "perColumnLimit": 100,
   "trustWorktrees": true,
+  "autoCleanupWorktrees": true,
+  "worktreeCleanupGraceHours": 24,
   "terminalFontSize": 20,
   "allowedOrigins": [],
   "shazamPrompt": "You are working on pull request {url}. ...",
@@ -384,6 +410,8 @@ a preflight entry.
 
 ## Tests
 
+`npm test` runs the server unit tests in `test/` with Node's built-in runner. The worktree cleanup tests build a real bare repository, a shazam-style mirror and a worktree per case, and stub only GitHub's answers.
+
 `npm run test:e2e` runs the Playwright layout checks in `e2e/` at phone,
 phone-landscape, narrow-window and desktop sizes. The server is stubbed with
 fixtures, so they need no GitHub token or agent; Playwright starts the Vite dev
@@ -394,8 +422,7 @@ version because each version expects one specific browser build.
 
 ## Known gaps
 
-- Worktrees and mirrors under `~/.shazam/` are never garbage collected. Closing
-  a session kills the process but leaves the checkout on disk.
+- Mirrors under `~/.shazam/mirrors/` are never garbage collected; only worktrees are (see [Cleaning up worktrees](#cleaning-up-worktrees)). A terminal you opened yourself inside a worktree is invisible to the sweep, which only knows about shazam's own sessions.
 - Each column is capped at `perColumnLimit` (100, GitHub's own ceiling for a
   search page); there is no pagination beyond that.
 - Merge does not delete the branch, wait for a merge queue, or offer auto-merge.

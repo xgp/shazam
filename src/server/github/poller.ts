@@ -331,6 +331,7 @@ export class DashboardPoller {
   private inFlight: Promise<DashboardData> | null = null
   private consecutiveFailures = 0
   private firstRun: Promise<unknown> = Promise.resolve()
+  private readonly refreshListeners = new Set<(data: DashboardData) => void>()
 
   constructor(
     private readonly intervalMs: number,
@@ -358,6 +359,12 @@ export class DashboardPoller {
     this.firstRun = this.refresh()
     this.timer = setInterval(() => void this.refresh(), this.intervalMs)
     this.timer.unref()
+  }
+
+  /** Called after every poll, successful or not, with what the board now holds. */
+  onRefresh(listener: (data: DashboardData) => void): () => void {
+    this.refreshListeners.add(listener)
+    return () => this.refreshListeners.delete(listener)
   }
 
   stop(): void {
@@ -389,6 +396,13 @@ export class DashboardPoller {
       console.error(`shazam: poll failed (${this.consecutiveFailures}x): ${message}`)
       // Keep serving the last good payload; the UI surfaces `error` as a banner.
       this.data = { ...this.data, error: message }
+    }
+    for (const listener of this.refreshListeners) {
+      try {
+        listener(this.data)
+      } catch (err) {
+        console.error(`shazam: refresh listener failed: ${(err as Error).message}`)
+      }
     }
     return this.data
   }

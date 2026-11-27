@@ -6,6 +6,7 @@ import type { IPty } from 'node-pty'
 import type { AgentId, AgentSession, PtyServerMessage, ShazamIntent } from '../../shared/types.js'
 import { buildPrompt, getAdapter, type LaunchContext } from './adapter.js'
 import { loadConfig } from '../config.js'
+import { type BusyWorktrees, canonical } from './cleanup.js'
 import { ensureWorktree } from './worktree.js'
 
 /** Replayed to every attaching client, so a page reload does not lose scrollback. */
@@ -135,6 +136,21 @@ export class SessionManager {
       .filter((e) => e.companionOf === null)
       .map((e) => e.session)
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+  }
+
+  /**
+   * Worktrees a live process - agent or companion shell - is sitting in, plus
+   * repositories with a session still preparing one, whose path is not known
+   * yet. The worktree janitor leaves all of them alone.
+   */
+  busyWorktrees(): BusyWorktrees {
+    const busy: BusyWorktrees = { paths: new Set(), preparingRepos: new Set() }
+    for (const { session } of this.entries.values()) {
+      if (session.status === 'preparing') busy.preparingRepos.add(session.repo.toLowerCase())
+      if (session.status !== 'running' && session.status !== 'preparing') continue
+      if (session.worktreePath) busy.paths.add(canonical(session.worktreePath))
+    }
+    return busy
   }
 
   get(id: string): AgentSession | null {

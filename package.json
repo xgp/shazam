@@ -20,8 +20,9 @@
     "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "tsx watch src/server/cli.ts serve --no-open",
     "dev:web": "vite",
-    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.test.json",
     "start": "node dist/server/cli.js serve",
+    "test": "node --import tsx --test test/*.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

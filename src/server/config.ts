@@ -22,6 +22,17 @@ const configSchema = z.object({
    * applies to paths under this config's own mirrors/worktrees directories.
    */
   trustWorktrees: z.boolean().default(true),
+  /**
+   * Remove the worktrees shazam made once their pull request is merged or
+   * closed, or their issue is closed - but only when no session is using one,
+   * it has no uncommitted work, and its commits are on the remote.
+   */
+  autoCleanupWorktrees: z.boolean().default(true),
+  /**
+   * Hours a merged or closed item's worktree is kept before it is eligible, so
+   * a follow-up right after the merge still finds it. 0 removes immediately.
+   */
+  worktreeCleanupGraceHours: z.number().min(0).default(24),
   /** Font size, in px, for the embedded agent terminal. */
   terminalFontSize: z.number().int().min(8).max(48).default(20),
   /**

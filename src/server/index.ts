@@ -6,6 +6,7 @@ import fastifyWebsocket from '@fastify/websocket'
 import Fastify, { type FastifyInstance } from 'fastify'
 import type { HealthReport } from '../shared/types.js'
 import { originAllowed, tokenMatches } from './auth.js'
+import { WorktreeJanitor } from './agent/cleanup.js'
 import { SessionManager } from './agent/sessions.js'
 import type { Config } from './config.js'
 import { DashboardPoller } from './github/poller.js'
@@ -20,6 +21,7 @@ export interface ServerHandle {
   app: FastifyInstance
   poller: DashboardPoller
   sessions: SessionManager
+  janitor: WorktreeJanitor
   url: string
   stop: () => Promise<void>
 }
@@ -32,6 +34,12 @@ export async function startServer(
   const app = Fastify({ logger: false })
   const poller = new DashboardPoller(config.pollIntervalMs, config.perColumnLimit)
   const sessions = new SessionManager()
+  const janitor = new WorktreeJanitor({
+    busy: () => sessions.busyWorktrees(),
+    snapshot: () => poller.snapshot,
+  })
+  // The first poll lands seconds after start, so this is also the startup sweep.
+  poller.onRefresh(() => janitor.maybeSweep())
 
   await app.register(fastifyWebsocket)
 
@@ -54,7 +62,7 @@ export async function startServer(
     }
   })
 
-  registerApiRoutes(app, { poller, sessions, health })
+  registerApiRoutes(app, { poller, sessions, health, janitor })
   registerPtyRoute(app, sessions)
 
   if (existsSync(join(WEB_ROOT, 'index.html'))) {
@@ -81,6 +89,7 @@ export async function startServer(
     app,
     poller,
     sessions,
+    janitor,
     url: `http://${config.host === '0.0.0.0' ? '127.0.0.1' : config.host}:${config.port}`,
     stop: async () => {
       poller.stop()

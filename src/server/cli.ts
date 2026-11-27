@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process'
 import { Command } from 'commander'
+import { type CleanupReport, WorktreeJanitor, formatKb } from './agent/cleanup.js'
 import { loadOrCreateToken } from './auth.js'
 import { loadConfig } from './config.js'
 import { startServer } from './index.js'
@@ -82,5 +83,69 @@ program
     process.on('SIGINT', () => void shutdown())
     process.on('SIGTERM', () => void shutdown())
   })
+
+const worktrees = program.command('worktrees').description('Manage the worktrees shazam creates')
+
+worktrees
+  .command('prune')
+  .description('Remove worktrees whose PR is merged or closed, or whose issue is closed')
+  .option('-n, --dry-run', 'list what would be removed, and why, without removing anything')
+  .option('-g, --grace-hours <hours>', 'override worktreeCleanupGraceHours for this run', (v) =>
+    Number.parseFloat(v),
+  )
+  .action(async (options: { dryRun?: boolean; graceHours?: number }) => {
+    const config = loadConfig()
+    const body = { dryRun: options.dryRun ?? false, graceHours: options.graceHours }
+
+    // A running server knows which worktrees its sessions are in, so it does
+    // the sweep. With no server there can be no sessions, and this process can.
+    let report: CleanupReport
+    const server = `http://${config.host === '0.0.0.0' ? '127.0.0.1' : config.host}:${config.port}`
+    let response: Response | null = null
+    try {
+      response = await fetch(`${server}/api/worktrees/prune`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-shazam-token': loadOrCreateToken() },
+        body: JSON.stringify(body),
+      })
+    } catch {
+      response = null
+    }
+
+    if (response) {
+      if (!response.ok) {
+        console.error(`shazam: the server at ${server} refused the prune (${response.status}): ${await response.text()}`)
+        process.exitCode = 1
+        return
+      }
+      console.log(`${DIM}(swept by the running server at ${server}; its log has the detail)${RESET}`)
+      report = (await response.json()) as CleanupReport
+    } else {
+      report = await new WorktreeJanitor({
+        busy: () => ({ paths: new Set(), preparingRepos: new Set() }),
+        snapshot: () => null,
+        log: () => {},
+      }).sweep(body)
+    }
+    printReport(report)
+  })
+
+function printReport(report: CleanupReport): void {
+  console.log(
+    `\n${BOLD}Worktree cleanup${RESET}${report.dryRun ? ' (dry run)' : ''}, grace period ${report.graceHours}h`,
+  )
+  if (report.entries.length === 0) console.log('  no shazam worktrees found')
+  for (const e of report.entries) {
+    const size = e.sizeKb ? ` ${DIM}${formatKb(e.sizeKb)}${RESET}` : ''
+    console.log(`  ${e.action.padEnd(12)} ${e.repo}#${e.number}${size}  ${DIM}${e.reason}${RESET}`)
+    console.log(`  ${''.padEnd(12)} ${DIM}${e.path}${RESET}`)
+  }
+  const acted = report.entries.filter((e) => e.action === 'removed' || e.action === 'would-remove')
+  console.log(
+    `\n  ${acted.length} ${report.dryRun ? 'would be removed' : 'removed'}, ${formatKb(report.freedKb)} ${
+      report.dryRun ? 'reclaimable' : 'freed'
+    }\n`,
+  )
+}
 
 await program.parseAsync(process.argv)

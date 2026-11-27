@@ -6,6 +6,7 @@ import { closeIssue } from '../actions/close.js'
 import { addComment } from '../actions/comment.js'
 import { mergePullRequest } from '../actions/merge.js'
 import { editReviewers } from '../actions/reviewers.js'
+import type { WorktreeJanitor } from '../agent/cleanup.js'
 import type { SessionManager } from '../agent/sessions.js'
 import { getComments } from '../github/comments.js'
 import type { DashboardPoller } from '../github/poller.js'
@@ -82,10 +83,16 @@ export interface ApiDeps {
   poller: DashboardPoller
   sessions: SessionManager
   health: HealthReport
+  janitor: WorktreeJanitor
 }
 
+const pruneSchema = z.object({
+  dryRun: z.boolean().default(false),
+  graceHours: z.number().min(0).optional(),
+})
+
 export function registerApiRoutes(app: FastifyInstance, deps: ApiDeps): void {
-  const { poller, sessions, health } = deps
+  const { poller, sessions, health, janitor } = deps
 
   app.get('/api/health', async () => health)
 
@@ -169,6 +176,16 @@ export function registerApiRoutes(app: FastifyInstance, deps: ApiDeps): void {
     const result = await closeIssue(parsed.data.url, parsed.data.comment)
     if (result.ok) void poller.refresh()
     return result
+  })
+
+  // What `shazam worktrees prune` calls when a server is running, so a manual
+  // prune knows which worktrees live sessions are in.
+  app.post('/api/worktrees/prune', async (request, reply) => {
+    const parsed = pruneSchema.safeParse(request.body ?? {})
+    if (!parsed.success) {
+      return reply.code(400).send({ ok: false, message: parsed.error.issues[0]?.message })
+    }
+    return janitor.sweep(parsed.data)
   })
 
   app.get('/api/sessions', async () => sessions.list())

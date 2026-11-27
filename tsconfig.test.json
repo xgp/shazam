@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.server.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "rootDir": ".",
+    "tsBuildInfoFile": null
+  },
+  "include": ["src/server/**/*.ts", "src/shared/**/*.ts", "test/**/*.ts"]
+}
