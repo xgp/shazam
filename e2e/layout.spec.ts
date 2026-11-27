@@ -17,3 +17,20 @@ test('narrow screens get the phone layout, wide ones the board', async ({ board 
     await expect(tabs.getByRole('tab')).toHaveCount(6)
   }
 })
+
+test('a title with one very long word wraps and keeps the buttons on the card', async ({ board }) => {
+  const cards = board.locator('[data-slot=card]')
+  await expect(cards.first()).toBeVisible()
+  // Cards in columns scrolled out of view (phone tabs) have no box; skip them.
+  const escapes = await cards.evaluateAll((els) =>
+    els.flatMap((card) => {
+      const box = card.getBoundingClientRect()
+      if (box.width === 0) return []
+      return [...card.querySelectorAll('button, a')]
+        .map((el) => el.getBoundingClientRect())
+        .filter((r) => r.width > 0 && (r.right > box.right + 0.5 || r.left < box.left - 0.5))
+        .map(() => card.textContent?.slice(0, 80) ?? '')
+    }),
+  )
+  expect(escapes).toEqual([])
+})

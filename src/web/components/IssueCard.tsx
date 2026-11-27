@@ -49,8 +49,9 @@ export function IssueCard({ issue, ctx }: { issue: IssueItem; ctx: ColumnContext
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        {/* Long titles must wrap rather than push the timestamp off the card. */}
-        <div className="flex min-w-0 flex-col gap-1">
+        {/* Long titles must wrap rather than push the timestamp off the card, and
+            wrap-anywhere breaks a single overlong word (a path, a URL) too. */}
+        <div className="flex min-w-0 flex-col gap-1 wrap-anywhere">
           <span className="text-sm text-muted-foreground">
             {issue.repo.nameWithOwner} #{issue.number}
           </span>

@@ -91,6 +91,8 @@ export const dashboard: DashboardData = {
     reviewRequests: [
       pr({ repo: 'globex/payments', title: 'Idempotency keys for refunds', author: 'hsimpson', commentCount: 8 }),
       pr({ repo: 'globex/payments', title: 'Bump node to 22', author: 'mburns', reviewDecision: 'changes_requested' }),
+      // One unbroken word wider than any card: it must wrap, not widen the card.
+      pr({ repo: 'initech/payments', title: 'Rename src/payments/refunds/IdempotencyKeyReconciliationServiceFactoryImplementation.ts', author: 'mburns' }),
     ],
     approvedPrs: [
       pr({ repo: 'globex/web', title: 'Dark mode for the invoice view', author: 'lsimpson', reviewDecision: 'approved' }),
@@ -99,7 +101,10 @@ export const dashboard: DashboardData = {
       pr({ repo: 'acme/rocket', title: 'Stage separation timing', mergedAt: ago(30), mergedBy: 'octocat', reviewDecision: 'approved' }),
     ],
     assignedIssues: [issue('acme/rocket', 'Launch window calculator ignores leap seconds')],
-    myIssues: [issue('acme/ground-control', 'Dashboard should work on a phone')],
+    myIssues: [
+      issue('acme/ground-control', 'Dashboard should work on a phone'),
+      issue('acme/ground-control', 'https://ground-control.example.com/telemetry/frames/duplicate-detection-window-misconfigured'),
+    ],
   },
 }
 
